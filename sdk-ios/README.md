@@ -2,6 +2,25 @@
 
 Push notifications, tags and in-app messages for iOS, as a Swift package (`PushFyre`). The package manifest is `Package.swift` at the repository root; the sources are in `sdk-ios/Sources/PushFyre`.
 
+## Quick start
+
+1. **Create the app in the PushFyre portal.** Choose **Apple iOS (APNs)** and upload your APNs key (`.p8`) or certificate (`.p12`). The channel shows **Active** only once that file is saved. Copy the **App ID**.
+2. **Add the package.** In Xcode: **File → Add Package Dependencies**, then enter `https://github.com/pushfyre-hub/pushfyre-sdk`. No account or token is needed, the repository is public.
+3. **Enable capabilities:** Push Notifications and Background Modes → Remote notifications.
+4. **Initialize at launch** and forward the device token (see Setup below).
+5. **Check it works** on a physical device (the Simulator never receives an APNs token). The device appears under **Audience** in the portal, and you can send a push from **Test Subscription**.
+
+Or in your own `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.1")
+],
+targets: [
+    .target(name: "YourApp", dependencies: ["PushFyre"])
+]
+```
+
 ## Setup
 
 ```swift
