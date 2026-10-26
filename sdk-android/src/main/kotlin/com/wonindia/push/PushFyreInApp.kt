@@ -110,6 +110,7 @@ internal object PushFyreInApp {
         val query = buildString {
             append("/in-app/sdk/messages?appId=").append(enc(cfg.appId))
             append("&platform=android&trigger=").append(enc(trigger))
+            append("&widgets=1")
             if (!eventName.isNullOrBlank()) append("&eventName=").append(enc(eventName))
             PushFyreApi.deviceId(app)?.let { append("&deviceId=").append(enc(it)) }
         }
@@ -129,7 +130,7 @@ internal object PushFyreInApp {
                 frequencyDays = frequency?.optInt("days", 1) ?: 1,
                 maxImpressions = if (json.isNull("maxImpressions")) 0 else json.optInt("maxImpressions", 0)
             )
-            if (message.id.isBlank() || !allowed(app, message)) continue
+            if (message.id.isBlank() || !known(message.format) || !allowed(app, message)) continue
             present(app, cfg, message)
             return
         }
@@ -156,6 +157,11 @@ internal object PushFyreInApp {
                         showing = false
                         report(app, cfg, message, "button_click")
                         openAction(activity, message, url)
+                    }
+
+                    override fun onRespond(answer: JSONObject) {
+                        showing = false
+                        report(app, cfg, message, "respond", answer)
                     }
                 }).show()
             }.onFailure {
@@ -208,7 +214,13 @@ internal object PushFyreInApp {
 
     // MARK: - Reporting
 
-    private fun report(app: Context, cfg: PushFyreConfig, message: InAppMessage, event: String) {
+    private fun known(format: String) = format in setOf(
+        "banner", "modal", "bottom_sheet", "full_screen", "image", "carousel",
+        "poll", "slider", "scratch", "flash", "feedback", "yes_no",
+        "checklist", "quiz", "image_choice", "countdown", "copy_code"
+    )
+
+    private fun report(app: Context, cfg: PushFyreConfig, message: InAppMessage, event: String, answer: JSONObject? = null) {
         scope.launch {
             runCatching {
                 val payload = JSONObject()
@@ -216,6 +228,7 @@ internal object PushFyreInApp {
                     .put("messageId", message.id)
                     .put("platform", "android")
                     .put("event", event)
+                if (answer != null) payload.put("answer", answer)
                 PushFyreApi.deviceId(app)?.let { payload.put("deviceId", it) }
                 PushFyreApi.authorizedRequest(app, cfg, "POST", "/in-app/sdk/events", payload.toString())
             }.onFailure { Log.w(PushFyre.TAG, "in-app $event report failed: ${it.message}") }

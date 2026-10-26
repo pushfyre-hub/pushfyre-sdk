@@ -7,6 +7,7 @@ final class PushFyreInAppRenderer {
     var onShown: (() -> Void)?
     var onDismissed: (() -> Void)?
     var onAction: ((String?) -> Void)?
+    var onRespond: (([String: Any]) -> Void)?
 
     private let window: UIWindow
     private let message: InAppMessage
@@ -43,6 +44,16 @@ final class PushFyreInAppRenderer {
     }
 
     func show() {
+        if PushFyreInAppWidgets.handles(message.format) {
+            PushFyreInAppWidgets.present(window: window, message: message, onShown: { [weak self] in
+                self?.onShown?()
+            }, onDismissed: { [weak self] in
+                self?.onDismissed?()
+            }, onRespond: { [weak self] answer in
+                self?.onRespond?(answer)
+            })
+            return
+        }
         message.format == "banner" ? showBanner() : showOverlay()
         onShown?()
     }

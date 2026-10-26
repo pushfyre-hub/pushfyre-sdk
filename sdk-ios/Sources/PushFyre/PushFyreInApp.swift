@@ -34,7 +34,7 @@ enum PushFyreInApp {
     static func trigger(trigger: String, eventName: String?) {
         guard enabled, let config = PushFyre.config else { return }
 
-        var path = "/in-app/sdk/messages?appId=\(escape(config.appId))&platform=ios&trigger=\(escape(trigger))"
+        var path = "/in-app/sdk/messages?appId=\(escape(config.appId))&platform=ios&trigger=\(escape(trigger))&widgets=1"
         if let eventName = eventName, !eventName.isEmpty { path += "&eventName=\(escape(eventName))" }
         if let deviceId = PushFyreApi.deviceId { path += "&deviceId=\(escape(deviceId))" }
 
@@ -55,7 +55,7 @@ enum PushFyreInApp {
                     frequencyDays: frequency?["days"] as? Int ?? 1,
                     maxImpressions: item["maxImpressions"] as? Int ?? 0
                 )
-                if !message.id.isEmpty, allowed(message) {
+                if !message.id.isEmpty, known(message.format), allowed(message) {
                     DispatchQueue.main.async { present(message, config: config) }
                     return
                 }
@@ -92,6 +92,10 @@ enum PushFyreInApp {
             finished()
             report(message, config: config, event: "button_click")
             open(message: message, url: url)
+        }
+        renderer.onRespond = { answer in
+            finished()
+            report(message, config: config, event: "respond", answer: answer)
         }
         renderer.show()
     }
@@ -150,13 +154,20 @@ enum PushFyreInApp {
 
     // MARK: - Reporting
 
-    private static func report(_ message: InAppMessage, config: PushFyreConfig, event: String) {
+    private static func known(_ format: String) -> Bool {
+        ["banner", "modal", "bottom_sheet", "full_screen", "image", "carousel",
+         "poll", "slider", "scratch", "flash", "feedback", "yes_no",
+         "checklist", "quiz", "image_choice", "countdown", "copy_code"].contains(format)
+    }
+
+    private static func report(_ message: InAppMessage, config: PushFyreConfig, event: String, answer: [String: Any]? = nil) {
         var body: [String: Any] = [
             "appId": config.appId,
             "messageId": message.id,
             "platform": "ios",
             "event": event
         ]
+        if let answer = answer { body["answer"] = answer }
         if let deviceId = PushFyreApi.deviceId { body["deviceId"] = deviceId }
         PushFyreApi.authorizedRequest(config, method: "POST", path: "/in-app/sdk/events", body: body) { status, _ in
             if !(200...299).contains(status) { PushFyre.log("in-app \(event) report returned HTTP \(status)") }

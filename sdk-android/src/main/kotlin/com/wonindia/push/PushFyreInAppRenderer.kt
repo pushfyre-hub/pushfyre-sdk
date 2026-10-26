@@ -41,6 +41,7 @@ internal class PushFyreInAppRenderer(
         fun onShown()
         fun onDismissed()
         fun onAction(url: String?)
+        fun onRespond(answer: JSONObject) {}
     }
 
     private val content = message.content
@@ -61,6 +62,10 @@ internal class PushFyreInAppRenderer(
     private var finished = false
 
     fun show() {
+        if (PushFyreInAppWidgets.handles(message.format)) {
+            PushFyreInAppWidgets.show(activity, message, listener)
+            return
+        }
         if (message.format == "banner") showBanner() else showDialog()
         listener.onShown()
     }

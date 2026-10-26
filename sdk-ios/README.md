@@ -50,7 +50,7 @@ See `PushFyreConfig.swift` for every option.
 
 ## In-app messages
 
-Campaigns created under **In-App Messages** in the portal (banner, modal, bottom sheet, full screen, image and carousel) show inside your app with no extra code. After `initialize`, the SDK fetches the messages that apply to the device and shows at most one at a time on the foreground window.
+Campaigns created under **In-App Messages** in the portal (banner, modal, bottom sheet, full screen, image and carousel) show inside your app with no extra code. This build also draws interactive widgets (poll, slider, scratch card, flash card, feedback, yes or no, checklist, quiz, image choice, countdown and copy code). An older build still receives the six message formats and does not show a widget. After `initialize`, the SDK fetches the messages that apply to the device and shows at most one at a time on the foreground window.
 
 Fire your own event to show a message that listens for it:
 
