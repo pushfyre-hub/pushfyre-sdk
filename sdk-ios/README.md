@@ -67,3 +67,14 @@ PushFyre.setInAppMessagesEnabled(false)
 A button that opens a link goes to your `PushFyre.setTapHandler` first (with `actionId == "in_app"`), so your app can route deep links itself; otherwise the link opens in Safari.
 
 Messages are fetched over HTTPS when the app opens or an event fires. There is no persistent connection, so a newly launched campaign appears the next time one of those happens.
+
+## Live Activities
+
+The main `PushFyre` library stays on iOS 13. Live Activities are the second library, `PushFyreLiveActivity`, and need iOS 16.2.
+
+1. Add the `PushFyreLiveActivity` product to the app target.
+2. Add a Widget Extension target and add `PushFyreActivityWidget()` to its widget bundle.
+3. Set `NSSupportsLiveActivities` to `YES` in the app Info.plist.
+4. Call `PushFyreLiveActivity.enable()` at launch so update tokens, and on iOS 17.2 the push-to-start token, are uploaded.
+
+Until that extension has registered a token, PushFyre cannot update the lock screen or the Dynamic Island.

@@ -253,6 +253,12 @@ public enum PushFyre {
         }
     }
 
+    /// Sends an ActivityKit token to PushFyre. Called by PushFyreLiveActivity.
+    public static func uploadLiveActivityToken(kind: String, token: String, activityKey: String?) {
+        guard let config else { return }
+        PushFyreApi.uploadLiveActivityToken(config, kind: kind, token: token, activityKey: activityKey)
+    }
+
     static func log(_ message: String) {
         guard loggingEnabled else { return }
         print("[PushFyre] \(message)")

@@ -192,6 +192,54 @@ object PushFyre {
     @JvmStatic
     fun removeTag(context: Context, key: String) = removeTags(context, listOf(key))
 
+    /**
+     * Joins the Firebase topic for a broadcast Live Activity. The notification itself
+     * is an ongoing notification that later updates replace. This is not a Dynamic Island.
+     */
+    @JvmStatic
+    fun subscribeLiveActivity(context: Context, activityKey: String) {
+        val cfg = config ?: return
+        val key = activityKey.trim()
+        if (key.isEmpty()) return
+        val topic = "pfyla-$key"
+        val app = context.applicationContext
+        FirebaseMessaging.getInstance().subscribeToTopic(topic)
+        scope.launch {
+            val deviceId = PushFyreApi.deviceId(app) ?: return@launch
+            runCatching {
+                PushFyreApi.authorizedRequest(
+                    app,
+                    cfg,
+                    "POST",
+                    "/live-activities/sdk/$key/subscribe?platform=android",
+                    """{"deviceId":"$deviceId"}"""
+                )
+            }
+        }
+    }
+
+    /** Leaves the Firebase topic for a broadcast Live Activity. */
+    @JvmStatic
+    fun unsubscribeLiveActivity(context: Context, activityKey: String) {
+        val cfg = config ?: return
+        val key = activityKey.trim()
+        if (key.isEmpty()) return
+        val app = context.applicationContext
+        FirebaseMessaging.getInstance().unsubscribeFromTopic("pfyla-$key")
+        scope.launch {
+            val deviceId = PushFyreApi.deviceId(app) ?: return@launch
+            runCatching {
+                PushFyreApi.authorizedRequest(
+                    app,
+                    cfg,
+                    "POST",
+                    "/live-activities/sdk/$key/unsubscribe",
+                    """{"deviceId":"$deviceId"}"""
+                )
+            }
+        }
+    }
+
     /** Tags currently attached to this device, as last stored locally. */
     @JvmStatic
     fun tags(context: Context): Map<String, String> =

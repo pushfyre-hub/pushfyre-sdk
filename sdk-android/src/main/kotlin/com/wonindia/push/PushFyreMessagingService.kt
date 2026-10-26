@@ -29,6 +29,10 @@ class PushFyreMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        if (message.data["pushfyre_type"] == "live_activity") {
+            PushFyreLiveUpdate.show(this, message.data)
+            return
+        }
         val title = message.notification?.title ?: message.data["title"] ?: return
         val body = message.notification?.body ?: message.data["message"].orEmpty()
         val target = LINK_KEYS.firstNotNullOfOrNull { key ->

@@ -95,6 +95,20 @@ enum PushFyreApi {
         return merged
     }
 
+    static func uploadLiveActivityToken(
+        _ config: PushFyreConfig,
+        kind: String,
+        token: String,
+        activityKey: String?
+    ) {
+        guard let deviceId = deviceId, !token.isEmpty else { return }
+        var body: [String: Any] = ["deviceId": deviceId, "kind": kind, "token": token]
+        if let activityKey, !activityKey.isEmpty {
+            body["activityKey"] = activityKey
+        }
+        authorizedRequest(config, method: "POST", path: "/live-activities/sdk/tokens", body: body) { _, _ in }
+    }
+
     /// The server-issued id of this install, once it has registered at least once.
     static var deviceId: String? {
         UserDefaults.standard.string(forKey: deviceIdKey)

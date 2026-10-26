@@ -102,3 +102,13 @@ git push origin 1.0.1
 CI publishes that tag to Maven Central. The one-time account, namespace and signing setup is in [RELEASING.md](RELEASING.md). Locally, `./gradlew :sdk-android:publishToMavenLocal` publishes `1.0.0-SNAPSHOT` for same-machine testing.
 
 Apps bump the version string in their own `build.gradle.kts` to pick up a release - nothing else changes.
+
+## Live Activities
+
+A Live Activity arrives as an ongoing notification. The next update replaces it. Android does not show a Dynamic Island or a status-bar live-update chip.
+
+For a broadcast, join the topic:
+
+```kotlin
+PushFyre.subscribeLiveActivity(this, "order-1042")
+```
