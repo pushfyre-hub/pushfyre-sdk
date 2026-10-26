@@ -1,0 +1,94 @@
+# PushFyre Android SDK
+
+In-house push notification client, replacing OneSignal. Wraps FCM registration, tagging, and notification display behind a small API.
+
+## Integration
+
+```kotlin
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("https://gitlab01.daicompanies.com/api/v4/packages/maven")
+            name = "GitLab"
+            credentials(HttpHeaderCredentials::class) {
+                name = "Private-Token"
+                // A project Deploy Token (Settings -> Repository -> Deploy tokens),
+                // scope: read_package_registry only. Not a personal access token - a
+                // deploy token isn't tied to one person's account, so it doesn't break
+                // when someone's password changes or they leave the company.
+                value = providers.gradleProperty("gitlabToken").get()
+            }
+            authentication { create<HttpHeaderAuthentication>("header") }
+        }
+    }
+}
+```
+
+```kotlin
+// app/build.gradle.kts
+dependencies {
+    implementation("com.wonindia.push:sdk-android:1.0.0")
+}
+```
+
+`gitlabToken` goes in `~/.gradle/gradle.properties` (never commit it):
+```properties
+gitlabToken=<deploy token value>
+```
+
+Minimum requirements: `minSdk 24`, the Google Services plugin, and `google-services.json` in the app module - the same Firebase setup FCM itself needs.
+
+## Usage
+
+```kotlin
+// Application.onCreate()
+PushFyre.initialize(
+    this,
+    PushFyreConfig(
+        appId = "app_e6ae6e50",
+        apiBaseUrl = "https://push.example.com/api/v1",
+        environment = if (BuildConfig.DEBUG) PushFyreEnvironment.TEST else PushFyreEnvironment.PROD
+    )
+)
+
+// Activity - prompts for POST_NOTIFICATIONS on Android 13+, no-op below it
+PushFyre.requestNotificationPermission(this)
+
+// Once you know who the user is
+PushFyre.login(this, externalUserId)
+PushFyre.sendTag(this, "isPremium", "true")
+```
+
+See `PushFyreConfig.kt` for every option and what each one does.
+
+## In-app messages
+
+Campaigns created under **In-App Messages** in the portal (banner, modal, bottom sheet, full screen, image and carousel) show inside your app with no extra code. The SDK fetches the messages that apply to the device when the app starts, and shows at most one at a time on the foreground screen.
+
+Fire your own event to show a message that listens for it:
+
+```kotlin
+PushFyre.trigger(context, "checkout_started")
+```
+
+Turn them off for a while, for example during onboarding:
+
+```kotlin
+PushFyre.setInAppMessagesEnabled(false)
+```
+
+A button that opens a link goes to `PushFyre.setTapHandler` first (with `actionId = "in_app"`), so your app can route deep links itself; otherwise the link opens externally.
+
+## Releasing a new version
+
+```bash
+git tag 1.0.1
+git push origin 1.0.1
+```
+
+CI publishes automatically off that tag (`.gitlab-ci.yml`, `publish-sdk-android` job) using `CI_JOB_TOKEN` - nothing to configure per release. Locally, `./gradlew :sdk-android:publishToMavenLocal` still publishes `1.0.0-SNAPSHOT` for same-machine testing, unaffected by any of this.
+
+Consumers bump the version string in their own `build.gradle.kts` to pick up a release - nothing else changes.
