@@ -2,6 +2,15 @@
 
 In-house push notification client, replacing OneSignal. Wraps FCM registration, tagging, and notification display behind a small API.
 
+## Quick start
+
+1. **Create the app in the PushFyre portal.** Choose **Google Android (FCM)** and upload your Firebase service account JSON. The channel shows **Active** only once that file is saved. Copy the **App ID** from the install page.
+2. **Add Firebase to your project.** Add the Google Services plugin and put `google-services.json` in your app module (see below).
+3. **Add the dependency.** One line, no repository or token.
+4. **Initialize once** in `Application.onCreate` with your App ID and API address.
+5. **Ask for notification permission** from an Activity (Android 13 and later).
+6. **Check it works.** Run the app, open **Audience** in the portal and the device appears there. Send yourself a push from **Test Subscription**.
+
 ## Integration
 
 The SDK is on Maven Central, so there is no repository or token to set up. Add one line to your app module:
@@ -22,6 +31,21 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
     }
+}
+```
+
+Firebase (PushFyre delivers through FCM, so this is the standard Firebase setup). Download `google-services.json` into `app/`, then:
+
+```kotlin
+// build.gradle.kts (project)
+plugins {
+    id("com.google.gms.google-services") version "4.4.2" apply false
+}
+
+// app/build.gradle.kts
+plugins {
+    id("com.android.application")
+    id("com.google.gms.google-services")
 }
 ```
 
