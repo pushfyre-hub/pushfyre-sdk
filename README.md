@@ -76,6 +76,14 @@ Requirements: `minSdk 24`, the Google Services plugin and `google-services.json`
 
 Test on a physical device, because the iOS Simulator never receives an APNs token. The device appears under **Audience** in the portal, and you can send yourself a push from **Test Subscription**. Requires iOS 13 or later. More in [`sdk-ios/README.md`](sdk-ios/README.md).
 
+## More features
+
+- **In-app messages:** banners, modals, bottom sheets, full screen, image and carousel, plus interactive widgets (poll, slider, quiz and more). They show with no extra code. Triggers and events are in the SDK READMEs.
+- **Live Activities:** on iOS a native Live Activity; on Android one ongoing notification that updates in place and is removed when the activity ends.
+- **Notification permission:** `PushFyre.requestNotificationPermission(activity)` can be called at any time, for example from a button tap.
+
+Details and code: [`sdk-android/README.md`](sdk-android/README.md) and [`sdk-ios/README.md`](sdk-ios/README.md).
+
 ## Releasing
 
 Maintainers: one tag releases both SDKs. Pushing a version tag such as `1.0.1` publishes the Android SDK to Maven Central, and the same tag is what Swift Package Manager installs for iOS. See [`sdk-android/RELEASING.md`](sdk-android/RELEASING.md).

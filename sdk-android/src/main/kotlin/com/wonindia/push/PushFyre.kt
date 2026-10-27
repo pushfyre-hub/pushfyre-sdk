@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
@@ -131,9 +132,17 @@ object PushFyre {
         ) == PackageManager.PERMISSION_GRANTED
         if (granted) return
 
-        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        // Register on the registry directly, not with activity.registerForActivityResult: that one only works
+        // before the screen starts, so it crashed when called from a button tap, the usual place to ask.
+        var launcher: ActivityResultLauncher<String>? = null
+        launcher = activity.activityResultRegistry.register(
+            "pushfyre.notification-permission",
+            ActivityResultContracts.RequestPermission()
+        ) { ok ->
             Log.d(TAG, "POST_NOTIFICATIONS granted=$ok")
-        }.launch(Manifest.permission.POST_NOTIFICATIONS)
+            launcher?.unregister()
+        }
+        launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     /**
