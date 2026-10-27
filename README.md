@@ -16,7 +16,7 @@ Push notifications, in-app messages and user tagging for mobile apps, backed by 
    ```kotlin
    // app/build.gradle.kts
    dependencies {
-       implementation("io.github.pushfyre-hub:sdk-android:1.0.0")
+       implementation("io.github.pushfyre-hub:sdk-android:1.0.2")
    }
    ```
 
@@ -50,7 +50,7 @@ Requirements: `minSdk 24`, the Google Services plugin and `google-services.json`
 
    ```swift
    dependencies: [
-       .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.1")
+       .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.2")
    ],
    targets: [
        .target(name: "YourApp", dependencies: ["PushFyre"])
