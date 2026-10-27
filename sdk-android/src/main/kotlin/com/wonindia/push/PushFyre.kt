@@ -136,6 +136,41 @@ object PushFyre {
         }.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    /**
+     * Saves a phone number for WhatsApp and marks this device as opted in.
+     *
+     * Call this only after the person has agreed, in your own UI, to receive WhatsApp
+     * messages at this number. The SDK does not show a consent dialog. The number must be
+     * international, for example `+14155552671`. An invalid number is ignored.
+     */
+    @JvmStatic
+    fun setWhatsAppPhone(context: Context, phone: String) {
+        val normalized = normalizeWhatsAppPhone(phone)
+        if (normalized == null) {
+            Log.w(TAG, "setWhatsAppPhone ignored: use international format, for example +14155552671")
+            return
+        }
+        val cfg = config ?: run { Log.w(TAG, "setWhatsAppPhone before initialize - ignored"); return }
+        val app = context.applicationContext
+        PushFyreApi.saveWhatsAppConsent(app, normalized, true)
+        scope.launch {
+            runCatching { register(app, cfg) }
+                .onFailure { Log.e(TAG, "WhatsApp phone registration failed", it) }
+        }
+    }
+
+    /** Stops WhatsApp messages for this device. The stored number is no longer used for sends. */
+    @JvmStatic
+    fun clearWhatsAppPhone(context: Context) {
+        val cfg = config ?: run { Log.w(TAG, "clearWhatsAppPhone before initialize - ignored"); return }
+        val app = context.applicationContext
+        PushFyreApi.saveWhatsAppConsent(app, null, false)
+        scope.launch {
+            runCatching { register(app, cfg) }
+                .onFailure { Log.e(TAG, "WhatsApp opt-out registration failed", it) }
+        }
+    }
+
     /** Associates this device with your own user id, for targeting by external id. */
     @JvmStatic
     fun login(context: Context, externalUserId: String) {
@@ -254,6 +289,13 @@ object PushFyre {
             runCatching { register(app, cfg) }
                 .onFailure { Log.e(TAG, "tag sync failed", it) }
         }
+    }
+
+    private fun normalizeWhatsAppPhone(raw: String): String? {
+        val compact = raw.replace(Regex("[\\s()-]"), "")
+        if (compact.isEmpty()) return null
+        val withPlus = if (compact.startsWith("+")) compact else "+$compact"
+        return if (Regex("^\\+[1-9][0-9]{7,14}$").matches(withPlus)) withPlus else null
     }
 
     internal fun onTokenRefreshed(context: Context, token: String) {

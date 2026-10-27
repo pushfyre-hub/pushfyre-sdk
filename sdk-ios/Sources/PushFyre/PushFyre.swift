@@ -136,6 +136,46 @@ public enum PushFyre {
         log("APNs registration failed: \(error.localizedDescription)")
     }
 
+    /// Saves a phone number for WhatsApp and marks this device as opted in.
+    ///
+    /// Call this only after the person has agreed, in your own UI, to receive WhatsApp
+    /// messages at this number. The SDK does not show a consent dialog. The number must be
+    /// international, for example `+14155552671`. An invalid number is ignored.
+    public static func setWhatsAppPhone(_ phone: String) {
+        guard let normalized = Self.normalizeWhatsAppPhone(phone) else {
+            log("setWhatsAppPhone ignored: use international format, for example +14155552671")
+            return
+        }
+        PushFyreApi.saveWhatsAppConsent(phone: normalized, optedIn: true)
+        syncRegistration()
+    }
+
+    /// Stops WhatsApp messages for this device. The stored number is no longer used for sends.
+    public static func clearWhatsAppPhone() {
+        PushFyreApi.saveWhatsAppConsent(phone: nil, optedIn: false)
+        syncRegistration()
+    }
+
+    private static func normalizeWhatsAppPhone(_ raw: String) -> String? {
+        let compact = raw.replacingOccurrences(of: "[\\s()-]", with: "", options: .regularExpression)
+        guard !compact.isEmpty else { return nil }
+        let withPlus = compact.hasPrefix("+") ? compact : "+\(compact)"
+        guard withPlus.range(of: "^\\+[1-9][0-9]{7,14}$", options: .regularExpression) != nil else { return nil }
+        return withPlus
+    }
+
+    private static func syncRegistration() {
+        guard let config = config else {
+            log("WhatsApp phone stored locally; it will sync on the next registration")
+            return
+        }
+        guard let token = PushFyreApi.cachedApnsToken else {
+            log("WhatsApp phone stored locally; it will sync once APNs responds")
+            return
+        }
+        PushFyreApi.registerDevice(config, apnsToken: token)
+    }
+
     /// Associates this device with your own user id so campaigns can target it.
     public static func login(externalUserId: String) {
         guard let config = config else {

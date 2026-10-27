@@ -22,6 +22,8 @@ internal object PushFyreApi {
     private const val KEY_TENANT = "tenant_id"
     private const val KEY_TAGS = "tags"
     private const val KEY_DEVICE_ID = "device_id"
+    private const val KEY_WA_PHONE = "wa_phone"
+    private const val KEY_WA_OPTIN = "wa_optin"
     private const val ENVIRONMENT_TAG = "environment"
 
     /**
@@ -126,6 +128,14 @@ internal object PushFyreApi {
             .apply {
                 appVersion(context)?.let { put("appVersion", it) }
                 externalUserId?.let { put("externalUserId", it) }
+                val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                if (prefs.contains(KEY_WA_OPTIN)) {
+                    val optedIn = prefs.getBoolean(KEY_WA_OPTIN, false)
+                    put("whatsAppOptIn", optedIn)
+                    if (optedIn) {
+                        prefs.getString(KEY_WA_PHONE, null)?.takeIf { it.isNotBlank() }?.let { put("phoneNumber", it) }
+                    }
+                }
             }
 
         val (code, responseBody) = postForBody(
@@ -149,11 +159,25 @@ internal object PushFyreApi {
 
         // A cached credential outlives its expiry; drop it so the next attempt refetches.
         if (code == 401 || code == 403) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_TOKEN)
+                .remove(KEY_TENANT)
+                .apply()
             Log.w(PushFyre.TAG, "credential rejected ($code); cleared cache for retry")
             return
         }
         Log.d(PushFyre.TAG, "device registered (HTTP $code)")
+    }
+
+    fun saveWhatsAppConsent(context: Context, phone: String?, optedIn: Boolean) {
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (optedIn && !phone.isNullOrBlank()) {
+            editor.putString(KEY_WA_PHONE, phone).putBoolean(KEY_WA_OPTIN, true)
+        } else {
+            editor.remove(KEY_WA_PHONE).putBoolean(KEY_WA_OPTIN, false)
+        }
+        editor.apply()
     }
 
     /** The server-issued id of this install, once it has registered at least once. */

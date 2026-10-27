@@ -8,6 +8,8 @@ enum PushFyreApi {
     private static let tokenKey = "com.wonindia.pushfyre.apnsToken"
     private static let tagsKey = "com.wonindia.pushfyre.tags"
     private static let deviceIdKey = "com.wonindia.pushfyre.deviceId"
+    private static let whatsAppPhoneKey = "com.wonindia.pushfyre.whatsAppPhone"
+    private static let whatsAppOptInKey = "com.wonindia.pushfyre.whatsAppOptIn"
     private static let reportedKey = "com.wonindia.pushfyre.reportedEvents"
 
     private static var reportedEvents: [String] {
@@ -218,6 +220,16 @@ enum PushFyreApi {
     /// the one that actually lands last.
     private static let registrationQueue = DispatchQueue(label: "com.wonindia.pushfyre.registration")
 
+    static func saveWhatsAppConsent(phone: String?, optedIn: Bool) {
+        if optedIn, let phone = phone, !phone.isEmpty {
+            UserDefaults.standard.set(phone, forKey: whatsAppPhoneKey)
+            UserDefaults.standard.set(true, forKey: whatsAppOptInKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: whatsAppPhoneKey)
+            UserDefaults.standard.set(false, forKey: whatsAppOptInKey)
+        }
+    }
+
     static func registerDevice(
         _ config: PushFyreConfig,
         apnsToken: String,
@@ -272,6 +284,13 @@ enum PushFyreApi {
         }
         if let externalUserId = externalUserId {
             body["externalUserId"] = externalUserId
+        }
+        if UserDefaults.standard.object(forKey: whatsAppOptInKey) != nil {
+            let optedIn = UserDefaults.standard.bool(forKey: whatsAppOptInKey)
+            body["whatsAppOptIn"] = optedIn
+            if optedIn, let phone = UserDefaults.standard.string(forKey: whatsAppPhoneKey), !phone.isEmpty {
+                body["phoneNumber"] = phone
+            }
         }
 
         var request = URLRequest(url: url)

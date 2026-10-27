@@ -74,6 +74,17 @@ PushFyre.sendTag(this, "isPremium", "true")
 
 See `PushFyreConfig.kt` for every option and what each one does.
 
+## WhatsApp phone number
+
+Ask for the number in your own screen and explain that it will be used for WhatsApp messages from your business. Call this only after the person agrees. The SDK does not show that dialog.
+
+```kotlin
+PushFyre.setWhatsAppPhone(context, "+14155552671")
+PushFyre.clearWhatsAppPhone(context) // when they withdraw
+```
+
+The number must include the country code. It is sent again on later registrations. A WhatsApp campaign reaches only devices that opted in this way.
+
 ## In-app messages
 
 Campaigns created under **In-App Messages** in the portal (banner, modal, bottom sheet, full screen, image and carousel) show inside your app with no extra code. This build also draws interactive widgets (poll, slider, scratch card, flash card, feedback, yes or no, checklist, quiz, image choice, countdown and copy code). An older build still receives the six message formats and does not show a widget. The SDK fetches the messages that apply to the device when the app starts, and shows at most one at a time on the foreground screen.
