@@ -14,7 +14,7 @@ Or in your own `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.2")
+    .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.1")
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["PushFyre"])
