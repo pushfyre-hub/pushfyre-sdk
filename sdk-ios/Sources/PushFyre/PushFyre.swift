@@ -176,12 +176,60 @@ public enum PushFyre {
         PushFyreApi.registerDevice(config, apnsToken: token)
     }
 
+    /// Adds an email subscription to this app, for email campaigns. After `login`, the
+    /// address is linked to that user id.
+    ///
+    /// Call this only after the person has agreed, in your own UI, to receive email at this
+    /// address. The SDK does not show a consent dialog. An invalid address is ignored. An
+    /// address that unsubscribed or reported spam stays unsubscribed.
+    public static func setEmail(_ email: String) {
+        guard let normalized = Self.normalizeEmail(email) else {
+            log("setEmail ignored: not a valid email address")
+            return
+        }
+        guard let config = config else {
+            log("setEmail called before initialize - ignored")
+            return
+        }
+        var body: [String: Any] = ["appId": config.appId, "email": normalized]
+        if let externalUserId = PushFyreApi.externalUserId {
+            body["externalUserId"] = externalUserId
+        }
+        PushFyreApi.authorizedRequest(config, method: "POST", path: "/email/sdk/subscribe", body: body) { status, _ in
+            if !(200...299).contains(status) { log("setEmail failed (HTTP \(status))") }
+        }
+    }
+
+    /// Removes an email subscription that `setEmail` added. Email to that address stops.
+    public static func removeEmail(_ email: String) {
+        guard let normalized = Self.normalizeEmail(email) else {
+            log("removeEmail ignored: not a valid email address")
+            return
+        }
+        guard let config = config else {
+            log("removeEmail called before initialize - ignored")
+            return
+        }
+        let body: [String: Any] = ["appId": config.appId, "email": normalized]
+        PushFyreApi.authorizedRequest(config, method: "POST", path: "/email/sdk/unsubscribe", body: body) { status, _ in
+            if !(200...299).contains(status) { log("removeEmail failed (HTTP \(status))") }
+        }
+    }
+
+    private static func normalizeEmail(_ raw: String) -> String? {
+        let email = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let pattern = "^[^\\s@<>()\",;:\\\\\\[\\]]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
+        guard email.count <= 250, email.range(of: pattern, options: .regularExpression) != nil else { return nil }
+        return email
+    }
+
     /// Associates this device with your own user id so campaigns can target it.
     public static func login(externalUserId: String) {
         guard let config = config else {
             log("login called before initialize - ignored")
             return
         }
+        PushFyreApi.externalUserId = externalUserId
         guard let token = PushFyreApi.cachedApnsToken else {
             log("login called before a device token was issued - ignored")
             return

@@ -11,6 +11,7 @@ enum PushFyreApi {
     private static let whatsAppPhoneKey = "com.wonindia.pushfyre.whatsAppPhone"
     private static let whatsAppOptInKey = "com.wonindia.pushfyre.whatsAppOptIn"
     private static let reportedKey = "com.wonindia.pushfyre.reportedEvents"
+    private static let externalUserIdKey = "com.wonindia.pushfyre.externalUserId"
 
     private static var reportedEvents: [String] {
         UserDefaults.standard.stringArray(forKey: reportedKey) ?? []
@@ -114,6 +115,15 @@ enum PushFyreApi {
     /// The server-issued id of this install, once it has registered at least once.
     static var deviceId: String? {
         UserDefaults.standard.string(forKey: deviceIdKey)
+    }
+
+    /// The user id last passed to `login`, sent with `setEmail` so the address belongs to that user.
+    static var externalUserId: String? {
+        get { UserDefaults.standard.string(forKey: externalUserIdKey) }
+        set {
+            let value = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !value.isEmpty { UserDefaults.standard.set(value, forKey: externalUserIdKey) }
+        }
     }
 
     /// Runs `block` after every registration queued so far has finished. In-app messaging uses

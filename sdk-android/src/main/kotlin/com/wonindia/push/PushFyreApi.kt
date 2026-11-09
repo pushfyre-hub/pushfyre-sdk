@@ -24,6 +24,7 @@ internal object PushFyreApi {
     private const val KEY_DEVICE_ID = "device_id"
     private const val KEY_WA_PHONE = "wa_phone"
     private const val KEY_WA_OPTIN = "wa_optin"
+    private const val KEY_EXTERNAL_ID = "external_user_id"
     private const val ENVIRONMENT_TAG = "environment"
 
     /**
@@ -179,6 +180,16 @@ internal object PushFyreApi {
         }
         editor.apply()
     }
+
+    /** The user id last passed to login, sent with setEmail so the address belongs to that user. */
+    internal fun saveExternalUserId(context: Context, externalUserId: String) {
+        val value = externalUserId.trim()
+        if (value.isEmpty()) return
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_EXTERNAL_ID, value).apply()
+    }
+
+    internal fun externalUserId(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_EXTERNAL_ID, null)
 
     /** The server-issued id of this install, once it has registered at least once. */
     internal fun deviceId(context: Context): String? =

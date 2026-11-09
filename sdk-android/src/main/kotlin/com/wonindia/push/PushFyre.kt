@@ -16,6 +16,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONObject
+import java.util.Locale
 
 /**
  * Entry point for the WON push platform.
@@ -171,11 +173,51 @@ object PushFyre {
         }
     }
 
+    /**
+     * Adds an email subscription to this app, for email campaigns. After [login], the
+     * address is linked to that user id.
+     *
+     * Call this only after the person has agreed, in your own UI, to receive email at this
+     * address. The SDK does not show a consent dialog. An invalid address is ignored. An
+     * address that unsubscribed or reported spam stays unsubscribed.
+     */
+    @JvmStatic
+    fun setEmail(context: Context, email: String) {
+        val normalized = normalizeEmail(email)
+            ?: run { Log.w(TAG, "setEmail ignored: not a valid email address"); return }
+        val cfg = config ?: run { Log.w(TAG, "setEmail before initialize - ignored"); return }
+        val app = context.applicationContext
+        val body = JSONObject().put("appId", cfg.appId).put("email", normalized)
+        PushFyreApi.externalUserId(app)?.let { body.put("externalUserId", it) }
+        sendEmailRequest(app, cfg, "/email/sdk/subscribe", body, "setEmail")
+    }
+
+    /** Removes an email subscription that [setEmail] added. Email to that address stops. */
+    @JvmStatic
+    fun removeEmail(context: Context, email: String) {
+        val normalized = normalizeEmail(email)
+            ?: run { Log.w(TAG, "removeEmail ignored: not a valid email address"); return }
+        val cfg = config ?: run { Log.w(TAG, "removeEmail before initialize - ignored"); return }
+        val app = context.applicationContext
+        val body = JSONObject().put("appId", cfg.appId).put("email", normalized)
+        sendEmailRequest(app, cfg, "/email/sdk/unsubscribe", body, "removeEmail")
+    }
+
+    private fun sendEmailRequest(app: Context, cfg: PushFyreConfig, path: String, body: JSONObject, name: String) {
+        scope.launch {
+            runCatching {
+                val (code, text) = PushFyreApi.authorizedRequest(app, cfg, "POST", path, body.toString())
+                if (code !in 200..299) Log.w(TAG, "$name failed (HTTP $code): $text")
+            }.onFailure { Log.e(TAG, "$name failed", it) }
+        }
+    }
+
     /** Associates this device with your own user id, for targeting by external id. */
     @JvmStatic
     fun login(context: Context, externalUserId: String) {
         val cfg = config ?: run { Log.w(TAG, "login before initialize - ignored"); return }
         val app = context.applicationContext
+        PushFyreApi.saveExternalUserId(app, externalUserId)
         scope.launch {
             runCatching { register(app, cfg, externalUserId) }
                 .onFailure { Log.e(TAG, "login failed", it) }
@@ -296,6 +338,11 @@ object PushFyre {
         if (compact.isEmpty()) return null
         val withPlus = if (compact.startsWith("+")) compact else "+$compact"
         return if (Regex("^\\+[1-9][0-9]{7,14}$").matches(withPlus)) withPlus else null
+    }
+
+    private fun normalizeEmail(raw: String): String? {
+        val email = raw.trim().lowercase(Locale.ROOT)
+        return if (email.length <= 250 && Regex("^[^\\s@<>()\",;:\\\\\\[\\]]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$").matches(email)) email else null
     }
 
     internal fun onTokenRefreshed(context: Context, token: String) {
