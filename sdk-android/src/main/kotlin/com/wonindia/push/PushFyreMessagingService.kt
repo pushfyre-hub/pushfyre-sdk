@@ -43,8 +43,20 @@ class PushFyreMessagingService : FirebaseMessagingService() {
             message.data[key]?.takeIf { it.isNotBlank() }
         }
 
+        val notificationId = message.data["notificationId"].orEmpty()
         Log.d(PushFyre.TAG, "message received title=$title target=$target image=$imageUrl")
-        show(title, body, target, imageUrl, message.data["largeIcon"], message.data["actionButtons"])
+        val shown = show(
+            title,
+            body,
+            target,
+            imageUrl,
+            message.data["largeIcon"],
+            message.data["actionButtons"],
+            notificationId
+        )
+        if (shown && notificationId.isNotBlank()) {
+            PushFyre.reportDeliveryEvent(this, notificationId, "delivered")
+        }
     }
 
     private fun show(
@@ -53,16 +65,17 @@ class PushFyreMessagingService : FirebaseMessagingService() {
         target: String?,
         imageUrl: String?,
         largeIconUrl: String?,
-        actionButtonsJson: String?
-    ) {
+        actionButtonsJson: String?,
+        notificationId: String
+    ): Boolean {
         val config = PushFyre.config ?: run {
             Log.w(PushFyre.TAG, "message received before initialize - not displaying")
-            return
+            return false
         }
 
         if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
             Log.w(PushFyre.TAG, "notifications disabled for this app - not displaying")
-            return
+            return false
         }
 
         val manager = getSystemService(NotificationManager::class.java)
@@ -90,7 +103,7 @@ class PushFyreMessagingService : FirebaseMessagingService() {
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setContentIntent(tapIntent(target))
+            .setContentIntent(tapIntent(target, notificationId = notificationId))
 
         // A campaign image becomes the expanded big picture; without one, long text
         // expands instead so the body is never truncated.
@@ -102,7 +115,7 @@ class PushFyreMessagingService : FirebaseMessagingService() {
             builder.addAction(
                 0,
                 button.title,
-                tapIntent(button.url.ifBlank { target }, index + 1, button.actionId)
+                tapIntent(button.url.ifBlank { target }, index + 1, button.actionId, notificationId)
             )
         }
 
@@ -120,7 +133,7 @@ class PushFyreMessagingService : FirebaseMessagingService() {
         }
 
         manager.notify(Random.nextInt(), builder.build())
-
+        return true
     }
 
     /**
@@ -182,12 +195,18 @@ class PushFyreMessagingService : FirebaseMessagingService() {
      * Routes through [PushFyreTapActivity] rather than straight to a browser, so the
      * host app's tap handler decides where the link opens.
      */
-    private fun tapIntent(target: String?, requestOffset: Int = 0, actionId: String? = null): PendingIntent {
+    private fun tapIntent(
+        target: String?,
+        requestOffset: Int = 0,
+        actionId: String? = null,
+        notificationId: String? = null
+    ): PendingIntent {
         val intent = Intent(this, PushFyreTapActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .apply {
                 target?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_TARGET_URL, it) }
                 actionId?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_ACTION_ID, it) }
+                notificationId?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_NOTIFICATION_ID, it) }
             }
 
         return PendingIntent.getActivity(
@@ -235,6 +254,7 @@ class PushFyreMessagingService : FirebaseMessagingService() {
         val IMAGE_KEYS = listOf("imageUrl", "bigPicture", "gifUrl", "bannerUrl")
         const val EXTRA_TARGET_URL = "com.wonindia.push.TARGET_URL"
         const val EXTRA_ACTION_ID = "com.wonindia.push.ACTION_ID"
+        const val EXTRA_NOTIFICATION_ID = "com.wonindia.push.NOTIFICATION_ID"
     }
 }
 
@@ -253,7 +273,11 @@ class PushFyreTapActivity : android.app.Activity() {
 
         val target = intent?.getStringExtra(PushFyreMessagingService.EXTRA_TARGET_URL)
         val actionId = intent?.getStringExtra(PushFyreMessagingService.EXTRA_ACTION_ID)
+        val notificationId = intent?.getStringExtra(PushFyreMessagingService.EXTRA_NOTIFICATION_ID)
         Log.d(PushFyre.TAG, "notification tapped target=$target actionId=$actionId")
+        if (!notificationId.isNullOrBlank()) {
+            PushFyre.reportDeliveryEvent(this, notificationId, "clicked", actionId, target)
+        }
 
         try {
             if (PushFyre.tapHandler?.onNotificationTapped(this, target, actionId) != true) {

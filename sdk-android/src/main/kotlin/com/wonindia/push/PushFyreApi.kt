@@ -25,6 +25,7 @@ internal object PushFyreApi {
     private const val KEY_WA_PHONE = "wa_phone"
     private const val KEY_WA_OPTIN = "wa_optin"
     private const val KEY_EXTERNAL_ID = "external_user_id"
+    private const val KEY_REPORTED = "reported_events"
     private const val ENVIRONMENT_TAG = "environment"
 
     /**
@@ -194,6 +195,52 @@ internal object PushFyreApi {
     /** The server-issued id of this install, once it has registered at least once. */
     internal fun deviceId(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DEVICE_ID, null)
+
+    /**
+     * Reports that this device showed or tapped a notification. Each pair is sent once.
+     * A failed call is not remembered, so the next show or tap can try again.
+     */
+    internal fun trackEvent(
+        context: Context,
+        config: PushFyreConfig,
+        notificationId: String,
+        eventType: String,
+        action: String? = null,
+        url: String? = null
+    ) {
+        val deviceId = deviceId(context)
+        if (deviceId.isNullOrBlank()) {
+            Log.w(PushFyre.TAG, "no device id yet - $eventType event for $notificationId not sent")
+            return
+        }
+        val key = "$notificationId|$eventType"
+        if (alreadyReported(context, key)) return
+        val payload = JSONObject()
+            .put("notificationId", notificationId)
+            .put("deviceId", deviceId)
+            .put("eventType", eventType)
+        if (!action.isNullOrBlank()) payload.put("action", action)
+        if (!url.isNullOrBlank()) payload.put("url", url)
+        val (code, _) = authorizedRequest(context, config, "POST", "/notifications/events", payload.toString())
+        if (code in 200..299) {
+            rememberReported(context, key)
+            Log.d(PushFyre.TAG, "$eventType event sent for $notificationId")
+        } else {
+            Log.w(PushFyre.TAG, "$eventType event for $notificationId returned HTTP $code")
+        }
+    }
+
+    private fun alreadyReported(context: Context, key: String): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getStringSet(KEY_REPORTED, emptySet())
+            ?.contains(key) == true
+
+    private fun rememberReported(context: Context, key: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val kept = prefs.getStringSet(KEY_REPORTED, emptySet()).orEmpty().toMutableList()
+        kept.add(key)
+        prefs.edit().putStringSet(KEY_REPORTED, kept.takeLast(200).toSet()).apply()
+    }
 
     /**
      * Authenticated call used by in-app messaging. Returns the HTTP status and body, and

@@ -13,6 +13,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -118,6 +119,27 @@ object PushFyre {
     @JvmStatic
     fun setTapHandler(handler: PushFyreTapHandler?) {
         tapHandler = handler
+    }
+
+    /** Tells the API this device showed or tapped a notification. Does nothing without an id. */
+    internal fun reportDeliveryEvent(
+        context: Context,
+        notificationId: String,
+        eventType: String,
+        action: String? = null,
+        url: String? = null
+    ) {
+        val cfg = config ?: return
+        val id = notificationId.trim()
+        if (id.isEmpty() || (eventType != "delivered" && eventType != "clicked")) return
+        val app = context.applicationContext
+        scope.launch {
+            runCatching {
+                // Registration and the first display can overlap. Wait once so the device id exists.
+                if (PushFyreApi.deviceId(app).isNullOrBlank()) delay(2000)
+                PushFyreApi.trackEvent(app, cfg, id, eventType, action, url)
+            }.onFailure { Log.w(TAG, "$eventType event failed", it) }
+        }
     }
 
     /**
