@@ -292,52 +292,20 @@ object PushFyre {
     fun removeTag(context: Context, key: String) = removeTags(context, listOf(key))
 
     /**
-     * Joins the Firebase topic for a broadcast Live Activity. The notification itself
-     * is an ongoing notification that later updates replace. This is not a Dynamic Island.
+     * Not needed any more. A broadcast Live Activity reaches every subscribed Android device
+     * that is registered with PushFyre, so there is no topic to join and nothing is sent.
+     * Kept so existing calls still compile.
      */
+    @Deprecated("Broadcast Live Activities reach every registered device. This does nothing.")
     @JvmStatic
-    fun subscribeLiveActivity(context: Context, activityKey: String) {
-        val cfg = config ?: return
-        val key = activityKey.trim()
-        if (key.isEmpty()) return
-        val topic = "pfyla-$key"
-        val app = context.applicationContext
-        FirebaseMessaging.getInstance().subscribeToTopic(topic)
-        scope.launch {
-            val deviceId = PushFyreApi.deviceId(app) ?: return@launch
-            runCatching {
-                PushFyreApi.authorizedRequest(
-                    app,
-                    cfg,
-                    "POST",
-                    "/live-activities/sdk/$key/subscribe?platform=android",
-                    """{"deviceId":"$deviceId"}"""
-                )
-            }
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun subscribeLiveActivity(context: Context, activityKey: String) = Unit
 
-    /** Leaves the Firebase topic for a broadcast Live Activity. */
+    /** Not needed any more. See [subscribeLiveActivity]. */
+    @Deprecated("Broadcast Live Activities reach every registered device. This does nothing.")
     @JvmStatic
-    fun unsubscribeLiveActivity(context: Context, activityKey: String) {
-        val cfg = config ?: return
-        val key = activityKey.trim()
-        if (key.isEmpty()) return
-        val app = context.applicationContext
-        FirebaseMessaging.getInstance().unsubscribeFromTopic("pfyla-$key")
-        scope.launch {
-            val deviceId = PushFyreApi.deviceId(app) ?: return@launch
-            runCatching {
-                PushFyreApi.authorizedRequest(
-                    app,
-                    cfg,
-                    "POST",
-                    "/live-activities/sdk/$key/unsubscribe",
-                    """{"deviceId":"$deviceId"}"""
-                )
-            }
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun unsubscribeLiveActivity(context: Context, activityKey: String) = Unit
 
     /** Tags currently attached to this device, as last stored locally. */
     @JvmStatic

@@ -13,7 +13,7 @@ enum PushFyreInAppWidgets {
     }
 
     static func present(window: UIWindow, message: InAppMessage, onShown: @escaping () -> Void, onDismissed: @escaping () -> Void, onRespond: @escaping ([String: Any]) -> Void) {
-        let content = message.content
+        let content = PushFyreDynamic.fill(message.content, tags: PushFyreApi.storedTags)
         let dim = UIView(frame: window.bounds)
         dim.backgroundColor = UIColor.black.withAlphaComponent(0.55)
         dim.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -124,6 +124,14 @@ enum PushFyreInAppWidgets {
         default:
             break
         }
+        let dynamicViews = PushFyreDynamic.views(from: content, textColor: textColor, buttonColor: buttonColor) { url in
+            if url.isEmpty { finish(nil) }
+            else {
+                if let link = URL(string: url) { UIApplication.shared.open(link) }
+                finish(nil)
+            }
+        }
+        PushFyreDynamic.place(dynamicViews, on: card, content: content)
         card.addArrangedSubview(button("Close", color: .systemGray5) { finish(nil) })
         dim.addSubview(card)
         NSLayoutConstraint.activate([

@@ -23,6 +23,25 @@ public struct PushFyreActivityAttributes: ActivityAttributes {
         public var code: String
         public var detail: String
         public var version: Int
+        public var dynamic: Dynamic?
+
+        public struct Dynamic: Codable, Hashable {
+            public var placement: String?
+            public var blocks: [Block]?
+        }
+
+        public struct Block: Codable, Hashable {
+            public var type: String
+            public var text: String?
+            public var src: String?
+            public var label: String?
+            public var action: Action?
+        }
+
+        public struct Action: Codable, Hashable {
+            public var type: String
+            public var value: String?
+        }
 
         public init(
             layout: String,
@@ -43,7 +62,8 @@ public struct PushFyreActivityAttributes: ActivityAttributes {
             endsAt: String = "",
             code: String = "",
             detail: String = "",
-            version: Int = 0
+            version: Int = 0,
+            dynamic: Dynamic? = nil
         ) {
             self.layout = layout
             self.title = title
@@ -64,6 +84,7 @@ public struct PushFyreActivityAttributes: ActivityAttributes {
             self.code = code
             self.detail = detail
             self.version = version
+            self.dynamic = dynamic
         }
     }
 

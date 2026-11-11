@@ -30,6 +30,9 @@ struct PushFyreActivityLockView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if state.dynamic?.placement == "above" {
+                PushFyreActivityBlocks(blocks: state.dynamic?.blocks ?? [])
+            }
             Text(PushFyreActivityText.title(state))
                 .font(.headline)
             Text(PushFyreActivityText.detail(state))
@@ -37,7 +40,31 @@ struct PushFyreActivityLockView: View {
             if state.layout == "delivery" || state.layout == "steps" {
                 ProgressView(value: state.layout == "steps" && state.total > 0 ? Double(state.current) / Double(state.total) : state.progress / 100)
             }
+            if state.dynamic?.placement != "above" {
+                PushFyreActivityBlocks(blocks: state.dynamic?.blocks ?? [])
+            }
         }
         .padding()
+    }
+}
+
+@available(iOS 16.2, *)
+struct PushFyreActivityBlocks: View {
+    let blocks: [PushFyreActivityAttributes.ContentState.Block]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                if block.type == "text", let text = block.text, !text.isEmpty {
+                    Text(text).font(.caption)
+                } else if block.type == "button", let label = block.label, !label.isEmpty {
+                    if let value = block.action?.value, let url = URL(string: value), value.hasPrefix("https://") {
+                        Link(label, destination: url).font(.caption.weight(.semibold))
+                    } else {
+                        Text(label).font(.caption.weight(.semibold))
+                    }
+                }
+            }
+        }
     }
 }

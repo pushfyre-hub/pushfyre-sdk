@@ -53,6 +53,19 @@ internal object PushFyreLiveUpdate {
             .setAutoCancel(false)
             .setContentIntent(openApp(context, key))
 
+        val dynamic = state?.optJSONObject("dynamic")
+        val extra = PushFyreDynamic.lines(dynamic?.optJSONArray("blocks"))
+        val combined = listOf(body, extra).filter { it.isNotBlank() }.joinToString("\n")
+        if (extra.isNotBlank()) {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(combined))
+            if (dynamic?.optString("placement") == "above") {
+                builder.setContentTitle(extra.lineSequence().first())
+                builder.setContentText(title)
+            } else {
+                builder.setContentText(combined)
+            }
+        }
+
         when (layout) {
             "delivery", "steps" -> {
                 val progress = state?.optInt("progress") ?: 0

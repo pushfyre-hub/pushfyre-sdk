@@ -44,7 +44,7 @@ internal class PushFyreInAppRenderer(
         fun onRespond(answer: JSONObject) {}
     }
 
-    private val content = message.content
+    private val content = message.content.also { PushFyreDynamic.fillObject(it, PushFyreApi.storedTags(activity)) }
 
     /** The icon is optional, but a banner or full-screen message with no button must stay dismissable. */
     private fun showClose(format: String) =
@@ -91,6 +91,7 @@ internal class PushFyreInAppRenderer(
                 leftMargin = dp(10)
             })
         }
+        PushFyreDynamic.addBlocks(texts, content, textColor, buttonColor, { url -> openDynamic(url) }) { view, url -> loadInto(view, url) }
 
         val holder = FrameLayout(activity)
         holder.addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -202,6 +203,7 @@ internal class PushFyreInAppRenderer(
             }
         }
 
+        PushFyreDynamic.addBlocks(column, content, textColor, buttonColor, { url -> openDynamic(url) }) { view, url -> loadInto(view, url) }
         if (format == "full_screen") {
             val scroll = ScrollView(activity).apply { isFillViewport = true }
             scroll.addView(column, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -336,6 +338,18 @@ internal class PushFyreInAppRenderer(
     }
 
     // MARK: - Actions
+
+    private fun openDynamic(url: String) {
+        if (finished) return
+        if (url.isBlank()) {
+            finish(dismissed = true)
+            return
+        }
+        PushFyreDynamic.open(activity, url)
+        finished = true
+        tearDown()
+        listener.onAction(url)
+    }
 
     private fun act() {
         if (finished) return

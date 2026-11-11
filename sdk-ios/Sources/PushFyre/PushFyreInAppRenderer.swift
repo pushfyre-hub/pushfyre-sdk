@@ -28,12 +28,13 @@ final class PushFyreInAppRenderer {
     init(window: UIWindow, message: InAppMessage) {
         self.window = window
         self.message = message
-        self.content = message.content
+        let filled = PushFyreDynamic.fill(message.content, tags: PushFyreApi.storedTags)
+        self.content = filled
         self.background = Self.color(message.content["backgroundColor"] as? String, fallback: .white)
         self.textColor = Self.color(message.content["textColor"] as? String, fallback: UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1))
         self.buttonColor = Self.color(message.content["buttonColor"] as? String, fallback: UIColor(red: 0.91, green: 0.2, blue: 0.1, alpha: 1))
         self.buttonTextColor = Self.color(message.content["buttonTextColor"] as? String, fallback: .white)
-        self.actionUrl = (message.content["action"] as? [String: Any])?["value"] as? String
+        self.actionUrl = (filled["action"] as? [String: Any])?["value"] as? String
     }
 
     /// The icon is optional, but a banner or full-screen message with no button must stay dismissable.
@@ -108,6 +109,7 @@ final class PushFyreInAppRenderer {
         texts.axis = .vertical
         texts.spacing = 2
         addLabels(to: texts, title: content["title"] as? String, body: content["message"] as? String, size: 15, alignment: .left)
+        placeDynamic(on: texts)
         row.addArrangedSubview(texts)
         if let label = content["buttonText"] as? String, !label.isEmpty {
             let button = makeButton(label, compact: true)
@@ -236,6 +238,7 @@ final class PushFyreInAppRenderer {
             }
         }
 
+        placeDynamic(on: stack)
         if showClose {
             let close = makeCloseButton()
             overlay.addSubview(close)
@@ -416,6 +419,19 @@ final class PushFyreInAppRenderer {
     }
 
     // MARK: - Actions
+
+    private func placeDynamic(on stack: UIStackView) {
+        let views = PushFyreDynamic.views(from: content, textColor: textColor, buttonColor: buttonColor) { [weak self] url in
+            guard let self, !self.finished else { return }
+            self.finished = true
+            if url.isEmpty {
+                self.tearDown { [weak self] in self?.onDismissed?() }
+            } else {
+                self.tearDown { [weak self] in self?.onAction?(url) }
+            }
+        }
+        PushFyreDynamic.place(views, on: stack, content: content)
+    }
 
     @objc private func actionTapped() {
         guard !finished else { return }

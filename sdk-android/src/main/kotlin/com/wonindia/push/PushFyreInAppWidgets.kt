@@ -32,7 +32,7 @@ internal object PushFyreInAppWidgets {
     fun handles(format: String) = format in formats
 
     fun show(activity: android.app.Activity, message: InAppMessage, listener: PushFyreInAppRenderer.Listener) {
-        val content = message.content
+        val content = message.content.also { PushFyreDynamic.fillObject(it, PushFyreApi.storedTags(activity)) }
         val textColor = color(content.optString("textColor"), Color.parseColor("#111827"))
         val buttonColor = color(content.optString("buttonColor"), Color.parseColor("#e8321a"))
         val background = color(content.optString("backgroundColor"), Color.WHITE)
@@ -146,6 +146,12 @@ internal object PushFyreInAppWidgets {
                 finish(JSONObject().put("copied", true))
             })
         }
+        PushFyreDynamic.addBlocks(column, content, textColor, buttonColor, { url ->
+            if (url.isBlank()) finish(null) else {
+                PushFyreDynamic.open(activity, url)
+                finish(null)
+            }
+        })
         column.addView(button(activity, "Close", Color.TRANSPARENT) { finish(null) })
         scroll.addView(column)
         dialog.setContentView(scroll)

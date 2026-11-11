@@ -129,8 +129,4 @@ Apps bump the version string in their own `build.gradle.kts` to pick up a releas
 
 A Live Activity arrives as an ongoing notification. The next update replaces it. Android does not show a Dynamic Island or a status-bar live-update chip.
 
-For a broadcast, join the topic:
-
-```kotlin
-PushFyre.subscribeLiveActivity(this, "order-1042")
-```
+There is nothing to call in the app. A broadcast reaches every Android device that is registered with PushFyre and has notifications enabled. `subscribeLiveActivity` and `unsubscribeLiveActivity` are deprecated and do nothing.
