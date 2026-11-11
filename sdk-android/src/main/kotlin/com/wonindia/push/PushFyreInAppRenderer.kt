@@ -353,6 +353,12 @@ internal class PushFyreInAppRenderer(
 
     private fun act() {
         if (finished) return
+        // A dismiss action is a dismissal, not a click. Reporting both would count it in the click-through rate.
+        val type = content.optJSONObject("action")?.optString("type").orEmpty()
+        if (type == "dismiss") {
+            finish(dismissed = true)
+            return
+        }
         finished = true
         tearDown()
         listener.onAction(actionUrl)

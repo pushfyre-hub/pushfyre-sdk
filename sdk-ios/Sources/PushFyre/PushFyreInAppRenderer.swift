@@ -435,6 +435,12 @@ final class PushFyreInAppRenderer {
 
     @objc private func actionTapped() {
         guard !finished else { return }
+        // A dismiss action is a dismissal, not a click. Reporting both would count it in the click-through rate.
+        let type = (content["action"] as? [String: Any])?["type"] as? String ?? ""
+        if type == "dismiss" {
+            dismiss()
+            return
+        }
         finished = true
         tearDown { [weak self] in self?.onAction?(self?.actionUrl) }
     }
