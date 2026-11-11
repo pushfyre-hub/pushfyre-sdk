@@ -100,10 +100,11 @@ After `login`, the address is linked to that user id. An address that unsubscrib
 
 Campaigns created under **In-App Messages** in the portal (banner, modal, bottom sheet, full screen, image and carousel) show inside your app with no extra code. This build also draws interactive widgets (poll, slider, scratch card, flash card, feedback, yes or no, checklist, quiz, image choice, countdown and copy code). An older build still receives the six message formats and does not show a widget. The SDK fetches the messages that apply to the device when the app starts, and shows at most one at a time on the foreground screen.
 
-Fire your own event to show a message that listens for it:
+Fire your own event. It shows any message that listens for it, and it is stored so segments can target people who did it (up to 10 string, number or boolean properties):
 
 ```kotlin
 PushFyre.trigger(context, "checkout_started")
+PushFyre.trigger(context, "purchase", mapOf("total" to 42, "currency" to "INR"))
 ```
 
 Turn them off for a while, for example during onboarding:

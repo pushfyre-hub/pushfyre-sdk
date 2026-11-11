@@ -99,14 +99,42 @@ object PushFyre {
     }
 
     /**
-     * Fires a named event that in-app messages can listen for, for example
-     * `PushFyre.trigger(context, "checkout_started")`. Does nothing when no live campaign
-     * is waiting on that event.
+     * Records a named event and shows any in-app message waiting for it, for example
+     * `PushFyre.trigger(context, "purchase", mapOf("total" to 42))`. The event is stored for
+     * segments and reporting. Properties are up to 10 string, number or boolean values.
      */
     @JvmStatic
-    fun trigger(context: Context, eventName: String) {
-        if (eventName.isBlank()) return
-        PushFyreInApp.trigger(context.applicationContext, "event", eventName.trim())
+    @JvmOverloads
+    fun trigger(context: Context, eventName: String, properties: Map<String, Any?>? = null) {
+        val name = eventName.trim()
+        if (name.isEmpty()) return
+        val app = context.applicationContext
+        recordEvent(app, name, properties)
+        PushFyreInApp.trigger(app, "event", name)
+    }
+
+    private fun recordEvent(app: Context, name: String, properties: Map<String, Any?>?) {
+        val cfg = config ?: return
+        scope.launch {
+            val deviceId = PushFyreApi.deviceId(app) ?: return@launch
+            val body = JSONObject()
+                .put("appId", cfg.appId)
+                .put("deviceId", deviceId)
+                .put("name", name)
+            if (!properties.isNullOrEmpty()) {
+                val props = JSONObject()
+                for ((key, value) in properties) {
+                    when (value) {
+                        is String, is Boolean, is Int, is Long, is Double, is Float -> props.put(key, value)
+                        is Number -> props.put(key, value.toDouble())
+                        else -> Unit
+                    }
+                }
+                body.put("properties", props)
+            }
+            // Best effort: a lost event must not affect the app.
+            runCatching { PushFyreApi.authorizedRequest(app, cfg, "POST", "/events/sdk", body.toString()) }
+        }
     }
 
     /** Turns in-app messages off or on for this process, for example while onboarding. */

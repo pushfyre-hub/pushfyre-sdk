@@ -72,13 +72,24 @@ public enum PushFyre {
 
     // MARK: - In-app messages
 
-    /// Fires a named event that in-app messages can listen for, for example
-    /// `PushFyre.trigger("checkout_started")`. Does nothing when no live campaign is waiting
-    /// on that event.
-    public static func trigger(_ eventName: String) {
+    /// Records a named event and shows any in-app message waiting for it, for example
+    /// `PushFyre.trigger("purchase", properties: ["total": 42])`. The event is stored for
+    /// segments and reporting. Properties are up to 10 string, number or boolean values.
+    public static func trigger(_ eventName: String, properties: [String: Any]? = nil) {
         let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+        recordEvent(name, properties: properties)
         PushFyreInApp.trigger(trigger: "event", eventName: name)
+    }
+
+    private static func recordEvent(_ name: String, properties: [String: Any]?) {
+        guard let config = config, let deviceId = PushFyreApi.deviceId else { return }
+        var body: [String: Any] = ["appId": config.appId, "deviceId": deviceId, "name": name]
+        if let properties = properties, !properties.isEmpty {
+            body["properties"] = properties.filter { $0.value is String || $0.value is NSNumber || $0.value is Bool }
+        }
+        // Best effort: a lost event must not affect the app.
+        PushFyreApi.authorizedRequest(config, method: "POST", path: "/events/sdk", body: body) { _, _ in }
     }
 
     /// Turns in-app messages off or on for this process, for example while onboarding.
