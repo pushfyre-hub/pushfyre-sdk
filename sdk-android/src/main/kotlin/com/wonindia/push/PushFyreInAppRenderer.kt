@@ -61,12 +61,19 @@ internal class PushFyreInAppRenderer(
     private var banner: View? = null
     private var finished = false
 
+    private fun dynamicPlace(): String {
+        val value = content.optString("position")
+        return if (value == "top" || value == "bottom" || value == "full") value else "center"
+    }
+
     fun show() {
         if (PushFyreInAppWidgets.handles(message.format)) {
             PushFyreInAppWidgets.show(activity, message, listener)
             return
         }
-        if (message.format == "banner") showBanner() else showDialog()
+        if (message.format == "dynamic" && dynamicPlace() == "top") showDynamicTop()
+        else if (message.format == "banner") showBanner()
+        else showDialog()
         listener.onShown()
     }
 
@@ -107,6 +114,29 @@ internal class PushFyreInAppRenderer(
         holder.animate().translationY(0f).setDuration(260).start()
     }
 
+    private fun showDynamicTop() {
+        val root = activity.findViewById<ViewGroup>(android.R.id.content)
+        val bar = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), statusBarHeight() + dp(12), dp(if (showClose("dynamic")) 40 else 16), dp(16))
+            this.background = rounded(bgColor, bottomOnly = true, radius = 16f)
+            elevation = dp(8).toFloat()
+        }
+        PushFyreDynamic.addBlocks(bar, content, textColor, buttonColor, { url -> openDynamic(url) }) { view, url -> loadInto(view, url) }
+        val holder = FrameLayout(activity)
+        holder.addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (showClose("dynamic")) {
+            holder.addView(closeButton(), FrameLayout.LayoutParams(dp(30), dp(30), Gravity.END or Gravity.TOP).apply {
+                rightMargin = dp(8)
+                topMargin = statusBarHeight() + dp(8)
+            })
+        }
+        root.addView(holder, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
+        banner = holder
+        holder.translationY = -dp(220).toFloat()
+        holder.animate().translationY(0f).setDuration(260).start()
+    }
+
     private fun showDialog() {
         val format = message.format
         val shell = Dialog(activity)
@@ -120,9 +150,10 @@ internal class PushFyreInAppRenderer(
         card.setOnClickListener { /* swallow taps on the card */ }
 
         val width = (activity.resources.displayMetrics.widthPixels - dp(40)).coerceAtMost(dp(if (format == "image") 460 else 420))
-        val params = when (format) {
-            "full_screen" -> FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            "bottom_sheet" -> FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM)
+        val slot = if (format == "dynamic") dynamicPlace() else format
+        val params = when (slot) {
+            "full_screen", "full" -> FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            "bottom_sheet", "bottom" -> FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM)
             else -> FrameLayout.LayoutParams(width, WRAP_CONTENT, Gravity.CENTER)
         }
         frame.addView(card, params)
@@ -131,10 +162,10 @@ internal class PushFyreInAppRenderer(
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             setLayout(MATCH_PARENT, MATCH_PARENT)
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setDimAmount(if (format == "full_screen") 0f else 0.55f)
+            setDimAmount(if (format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full")) 0f else 0.55f)
         }
         // A light full-screen background would hide the white status-bar icons.
-        if (format == "full_screen" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isLight(bgColor)) {
+        if ((format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full")) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isLight(bgColor)) {
             @Suppress("DEPRECATION")
             shell.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         }
@@ -176,6 +207,12 @@ internal class PushFyreInAppRenderer(
                 title(column, content.optString("title"), 22f, Gravity.CENTER, topMargin = dp(20))
                 body(column, content.optString("message"), 15f, Gravity.CENTER)
                 content.optString("buttonText").takeIf { it.isNotBlank() }?.let { column.addView(actionButton(it), buttonParams()) }
+            }
+            "dynamic" -> {
+                val place = dynamicPlace()
+                if (place == "full") wrapper.setBackgroundColor(bgColor) else wrapper.background = rounded(bgColor, topOnly = place == "bottom", radius = 18f)
+                wrapper.clipToOutline = place != "full"
+                column.setPadding(dp(22), dp(if (place == "full") 48 else 36), dp(22), dp(22))
             }
             "bottom_sheet" -> {
                 wrapper.background = rounded(bgColor, topOnly = true, radius = 22f)

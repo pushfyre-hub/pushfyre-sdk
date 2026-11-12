@@ -155,7 +155,7 @@ enum PushFyreInApp {
     // MARK: - Reporting
 
     private static func known(_ format: String) -> Bool {
-        ["banner", "modal", "bottom_sheet", "full_screen", "image", "carousel",
+        ["banner", "modal", "bottom_sheet", "full_screen", "image", "carousel", "dynamic",
          "poll", "slider", "scratch", "flash", "feedback", "yes_no",
          "checklist", "quiz", "image_choice", "countdown", "copy_code"].contains(format)
     }

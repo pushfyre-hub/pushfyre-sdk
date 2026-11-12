@@ -55,8 +55,19 @@ final class PushFyreInAppRenderer {
             })
             return
         }
-        message.format == "banner" ? showBanner() : showOverlay()
+        if message.format == "dynamic" && dynamicPlace() == "top" {
+            showDynamicTop()
+        } else if message.format == "banner" {
+            showBanner()
+        } else {
+            showOverlay()
+        }
         onShown?()
+    }
+
+    private func dynamicPlace() -> String {
+        let value = content["position"] as? String ?? "center"
+        return ["top", "bottom", "full"].contains(value) ? value : "center"
     }
 
     // MARK: - Banner
@@ -133,17 +144,69 @@ final class PushFyreInAppRenderer {
         UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut) { host.transform = .identity }
     }
 
+    private func showDynamicTop() {
+        let host = BannerHostView()
+        host.translatesAutoresizingMaskIntoConstraints = false
+        window.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.topAnchor.constraint(equalTo: window.topAnchor),
+            host.leadingAnchor.constraint(equalTo: window.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: window.trailingAnchor)
+        ])
+
+        let bar = UIView()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.backgroundColor = background
+        bar.layer.cornerRadius = 16
+        bar.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        host.addSubview(bar)
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: host.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            bar.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+        ])
+
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        bar.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 10),
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: showClose ? -44 : -16),
+            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -12)
+        ])
+        placeDynamic(on: stack)
+
+        if showClose {
+            let close = makeCloseButton()
+            bar.addSubview(close)
+            NSLayoutConstraint.activate([
+                close.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
+                close.topAnchor.constraint(equalTo: stack.topAnchor)
+            ])
+        }
+
+        container = host
+        host.layoutIfNeeded()
+        host.transform = CGAffineTransform(translationX: 0, y: -(host.bounds.height + 40))
+        UIView.animate(withDuration: 0.28, delay: 0, options: .curveEaseOut) { host.transform = .identity }
+    }
+
     // MARK: - Overlay formats
 
     private func showOverlay() {
         let format = message.format
+        let full = format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full")
         let overlay = UIView(frame: window.bounds)
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        overlay.backgroundColor = format == "full_screen" ? background : UIColor.black.withAlphaComponent(0.55)
+        overlay.backgroundColor = full ? background : UIColor.black.withAlphaComponent(0.55)
         window.addSubview(overlay)
         container = overlay
 
-        if format != "full_screen" {
+        if !full {
             let dismissTap = UITapGestureRecognizer(target: self, action: #selector(backgroundTapped))
             overlay.addGestureRecognizer(dismissTap)
         }
@@ -200,6 +263,48 @@ final class PushFyreInAppRenderer {
             }
             addLabels(to: stack, title: content["title"] as? String, body: content["message"] as? String, size: 20, alignment: .center)
             addButtonIfNeeded(to: stack)
+        case "dynamic":
+            let place = dynamicPlace()
+            if place == "full" {
+                NSLayoutConstraint.activate([
+                    card.topAnchor.constraint(equalTo: overlay.topAnchor),
+                    card.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+                    card.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                    card.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+                    stack.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+                    stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 28),
+                    stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -28)
+                ])
+            } else if place == "bottom" {
+                card.layer.cornerRadius = 22
+                card.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+                NSLayoutConstraint.activate([
+                    card.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                    card.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+                    card.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+                    stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 36),
+                    stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+                    stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
+                    stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -28)
+                ])
+            } else {
+                card.layer.cornerRadius = 18
+                NSLayoutConstraint.activate([
+                    card.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+                    card.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+                    card.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
+                    card.leadingAnchor.constraint(greaterThanOrEqualTo: overlay.leadingAnchor, constant: 20),
+                    card.trailingAnchor.constraint(lessThanOrEqualTo: overlay.trailingAnchor, constant: -20),
+                    stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 36),
+                    stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+                    stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
+                    stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -22)
+                ])
+                let preferredDynamic = card.widthAnchor.constraint(equalToConstant: 420)
+                preferredDynamic.priority = .defaultHigh
+                preferredDynamic.isActive = true
+            }
+            stack.spacing = 8
         default:
             card.layer.cornerRadius = 18
             NSLayoutConstraint.activate([
@@ -244,7 +349,7 @@ final class PushFyreInAppRenderer {
             overlay.addSubview(close)
             NSLayoutConstraint.activate([
                 close.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
-                close.topAnchor.constraint(equalTo: format == "full_screen" ? overlay.safeAreaLayoutGuide.topAnchor : card.topAnchor, constant: 10)
+                close.topAnchor.constraint(equalTo: format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full") ? overlay.safeAreaLayoutGuide.topAnchor : card.topAnchor, constant: 10)
             ])
         }
 

@@ -135,6 +135,7 @@ internal object PushFyreDynamic {
             val block = blocks.optJSONObject(index) ?: return@mapNotNull null
             when (block.optString("type")) {
                 "text" -> block.optString("text").takeIf { it.isNotBlank() }
+                "image" -> "Image".takeIf { block.optString("src").startsWith("https://") }
                 "button" -> block.optString("label").takeIf { it.isNotBlank() }
                 else -> null
             }

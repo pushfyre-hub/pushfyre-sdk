@@ -215,7 +215,7 @@ internal object PushFyreInApp {
     // MARK: - Reporting
 
     private fun known(format: String) = format in setOf(
-        "banner", "modal", "bottom_sheet", "full_screen", "image", "carousel",
+        "banner", "modal", "bottom_sheet", "full_screen", "image", "carousel", "dynamic",
         "poll", "slider", "scratch", "flash", "feedback", "yes_no",
         "checklist", "quiz", "image_choice", "countdown", "copy_code"
     )
