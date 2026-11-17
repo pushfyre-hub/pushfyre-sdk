@@ -93,6 +93,9 @@ enum PushFyreInApp {
             report(message, config: config, event: "button_click")
             open(message: message, url: url)
         }
+        renderer.onNamedClick = { actionId in
+            _ = PushFyre.tapHandler?(nil, actionId)
+        }
         renderer.onRespond = { answer in
             finished()
             report(message, config: config, event: "respond", answer: answer)

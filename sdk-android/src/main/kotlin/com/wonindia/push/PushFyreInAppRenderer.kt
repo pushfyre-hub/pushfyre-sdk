@@ -23,6 +23,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -42,6 +43,8 @@ internal class PushFyreInAppRenderer(
         fun onDismissed()
         fun onAction(url: String?)
         fun onRespond(answer: JSONObject) {}
+        /** A custom action id from a click, with no link to open. */
+        fun onNamedClick(actionId: String) {}
     }
 
     private val content = message.content.also { PushFyreDynamic.fillObject(it, PushFyreApi.storedTags(activity)) }
@@ -71,7 +74,9 @@ internal class PushFyreInAppRenderer(
             PushFyreInAppWidgets.show(activity, message, listener)
             return
         }
-        if (message.format == "dynamic" && dynamicPlace() == "top") showDynamicTop()
+        val top = message.format == "banner" || (message.format == "dynamic" && dynamicPlace() == "top")
+        if (top && hasDesigned()) showDesignedTop()
+        else if (message.format == "dynamic" && dynamicPlace() == "top") showDynamicTop()
         else if (message.format == "banner") showBanner()
         else showDialog()
         listener.onShown()
@@ -114,6 +119,29 @@ internal class PushFyreInAppRenderer(
         holder.animate().translationY(0f).setDuration(260).start()
     }
 
+    private fun hasDesigned() = message.format != "carousel" && (content.optJSONArray("blocks")?.length() ?: 0) > 0
+
+    private fun showDesignedTop() {
+        val root = activity.findViewById<ViewGroup>(android.R.id.content)
+        val pad = content.optInt("padding", 16).coerceIn(0, 48)
+        val bar = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(pad), statusBarHeight() + dp(pad), dp(pad), dp(pad))
+            this.background = rounded(bgColor, bottomOnly = true, radius = 16f)
+            elevation = dp(8).toFloat()
+        }
+        fillDesigned(bar)
+        bar.setOnClickListener { applyClicks(content.optJSONArray("backgroundClicks")) }
+        val holder = FrameLayout(activity)
+        paintBackground(holder)
+        holder.addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        if (showClose(message.format)) holder.addView(closeButton(), closeParams(statusBarHeight() + dp(8)))
+        root.addView(holder, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
+        banner = holder
+        holder.translationY = -dp(280).toFloat()
+        holder.animate().translationY(0f).setDuration(260).start()
+    }
+
     private fun showDynamicTop() {
         val root = activity.findViewById<ViewGroup>(android.R.id.content)
         val bar = LinearLayout(activity).apply {
@@ -147,7 +175,7 @@ internal class PushFyreInAppRenderer(
         val card = buildCard(format)
         val frame = FrameLayout(activity)
         frame.setOnClickListener { finish(dismissed = true) }
-        card.setOnClickListener { /* swallow taps on the card */ }
+        card.setOnClickListener { applyClicks(content.optJSONArray("backgroundClicks")) }
 
         val width = (activity.resources.displayMetrics.widthPixels - dp(40)).coerceAtMost(dp(if (format == "image") 460 else 420))
         val slot = if (format == "dynamic") dynamicPlace() else format
@@ -182,8 +210,18 @@ internal class PushFyreInAppRenderer(
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        when (format) {
-            "image" -> {
+        when {
+            hasDesigned() -> {
+                val pad = content.optInt("padding", 16).coerceIn(0, 48)
+                val full = format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full")
+                val bottom = format == "bottom_sheet" || (format == "dynamic" && dynamicPlace() == "bottom")
+                if (full) wrapper.setBackgroundColor(bgColor) else wrapper.background = rounded(bgColor, topOnly = bottom, radius = if (bottom) 22f else 18f)
+                if (!full) wrapper.clipToOutline = true
+                paintBackground(wrapper)
+                column.setPadding(dp(pad), dp(pad + 8), dp(pad), dp(pad))
+                fillDesigned(column)
+            }
+            format == "image" -> {
                 wrapper.background = rounded(bgColor, radius = 18f)
                 wrapper.clipToOutline = true
                 val picture = ImageView(activity).apply {
@@ -194,12 +232,12 @@ internal class PushFyreInAppRenderer(
                 loadInto(picture, content.optString("imageUrl"))
                 column.addView(picture, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
-            "carousel" -> {
+            format == "carousel" -> {
                 wrapper.background = rounded(bgColor, radius = 18f)
                 wrapper.clipToOutline = true
                 drawCarousel(column)
             }
-            "full_screen" -> {
+            format == "full_screen" -> {
                 wrapper.setBackgroundColor(bgColor)
                 column.gravity = Gravity.CENTER
                 column.setPadding(dp(28), dp(48), dp(28), dp(28))
@@ -208,13 +246,13 @@ internal class PushFyreInAppRenderer(
                 body(column, content.optString("message"), 15f, Gravity.CENTER)
                 content.optString("buttonText").takeIf { it.isNotBlank() }?.let { column.addView(actionButton(it), buttonParams()) }
             }
-            "dynamic" -> {
+            format == "dynamic" -> {
                 val place = dynamicPlace()
                 if (place == "full") wrapper.setBackgroundColor(bgColor) else wrapper.background = rounded(bgColor, topOnly = place == "bottom", radius = 18f)
                 wrapper.clipToOutline = place != "full"
                 column.setPadding(dp(22), dp(if (place == "full") 48 else 36), dp(22), dp(22))
             }
-            "bottom_sheet" -> {
+            format == "bottom_sheet" -> {
                 wrapper.background = rounded(bgColor, topOnly = true, radius = 22f)
                 column.setPadding(dp(22), dp(26), dp(22), dp(28))
                 addImage(column, content.optString("imageUrl"), MATCH_PARENT, dp(110), 14f)
@@ -240,8 +278,8 @@ internal class PushFyreInAppRenderer(
             }
         }
 
-        PushFyreDynamic.addBlocks(column, content, textColor, buttonColor, { url -> openDynamic(url) }) { view, url -> loadInto(view, url) }
-        if (format == "full_screen") {
+        if (!hasDesigned()) PushFyreDynamic.addBlocks(column, content, textColor, buttonColor, { url -> openDynamic(url) }) { view, url -> loadInto(view, url) }
+        if (format == "full_screen" || (format == "dynamic" && dynamicPlace() == "full")) {
             val scroll = ScrollView(activity).apply { isFillViewport = true }
             scroll.addView(column, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             wrapper.addView(scroll, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
@@ -249,10 +287,7 @@ internal class PushFyreInAppRenderer(
             wrapper.addView(column, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         }
         if (showClose(format)) {
-            wrapper.addView(closeButton(), FrameLayout.LayoutParams(dp(30), dp(30), Gravity.END or Gravity.TOP).apply {
-                topMargin = dp(if (format == "full_screen") 40 else 10)
-                rightMargin = dp(10)
-            })
+            wrapper.addView(closeButton(), closeParams(dp(if (format == "full_screen") 40 else 10)))
         }
         return wrapper
     }
@@ -364,14 +399,178 @@ internal class PushFyreInAppRenderer(
 
     private fun buttonParams() = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { topMargin = dp(16) }
 
-    private fun closeButton() = TextView(activity).apply {
-        text = "×"
-        setTextColor(Color.WHITE)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-        gravity = Gravity.CENTER
-        this.background = rounded(Color.parseColor("#59000000"), radius = 15f)
-        contentDescription = "Close"
-        setOnClickListener { finish(dismissed = true) }
+    private fun closeParams(top: Int): FrameLayout.LayoutParams {
+        val size = content.optInt("closeWidth", content.optInt("closeHeight", 30)).coerceIn(16, 48)
+        return FrameLayout.LayoutParams(dp(size), dp(size), Gravity.END or Gravity.TOP).apply {
+            topMargin = top
+            rightMargin = dp(8)
+        }
+    }
+
+    private fun paintBackground(parent: FrameLayout) {
+        val url = content.optString("backgroundImage")
+        if (!isHttp(url)) return
+        val picture = ImageView(activity).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        parent.addView(picture, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        loadInto(picture, url)
+    }
+
+    private fun fillDesigned(column: LinearLayout) {
+        val blocks = content.optJSONArray("blocks") ?: return
+        for (index in 0 until blocks.length()) {
+            val block = blocks.optJSONObject(index) ?: continue
+            if (block.has("enabled") && !block.optBoolean("enabled", true)) continue
+            val style = block.optJSONObject("style") ?: JSONObject()
+            val margins = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                topMargin = dp(style.optInt("marginTop").coerceIn(0, 80))
+                bottomMargin = dp(style.optInt("marginBottom").coerceIn(0, 80))
+                leftMargin = dp(style.optInt("marginLeft").coerceIn(0, 80))
+                rightMargin = dp(style.optInt("marginRight").coerceIn(0, 80))
+            }
+            when (block.optString("type")) {
+                "text" -> {
+                    val value = block.optString("text")
+                    if (value.isBlank()) continue
+                    column.addView(TextView(activity).apply {
+                        text = value
+                        setTextColor(color(style.optString("color"), textColor))
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, style.optInt("fontSize", 16).coerceIn(10, 48).toFloat())
+                        typeface = styledType(style)
+                        gravity = blockGravity(style.optString("align"))
+                        paintFlags = if (style.optBoolean("underline")) paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG else paintFlags
+                    }, margins)
+                }
+                "image" -> {
+                    val src = block.optString("src")
+                    if (!isHttp(src)) continue
+                    val picture = ImageView(activity).apply {
+                        adjustViewBounds = true
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        setOnClickListener { openBlock(block, alwaysClose = false) }
+                    }
+                    column.addView(picture, margins.apply { height = dp(160) })
+                    loadInto(picture, src)
+                }
+                "button" -> {
+                    val label = block.optString("text").ifBlank { block.optString("label") }
+                    if (label.isBlank()) continue
+                    val button = TextView(activity).apply {
+                        text = label
+                        setTextColor(color(style.optString("color"), buttonTextColor))
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, style.optInt("fontSize", 16).coerceIn(10, 48).toFloat())
+                        typeface = styledType(style)
+                        gravity = Gravity.CENTER
+                        setPadding(dp(18), dp(10), dp(18), dp(10))
+                        background = GradientDrawable().apply {
+                            cornerRadius = dp(style.optInt("radius", 12).coerceIn(0, 40)).toFloat()
+                            setColor(color(style.optString("background"), buttonColor))
+                            val width = style.optInt("borderWidth")
+                            if (width > 0) setStroke(dp(width.coerceAtMost(8)), color(style.optString("borderColor"), buttonColor))
+                        }
+                        if (style.optInt("shadowBlur") > 0) elevation = dp(style.optInt("shadowBlur").coerceAtMost(40)).toFloat()
+                        setOnClickListener { openBlock(block, alwaysClose = true) }
+                    }
+                    val align = style.optString("align")
+                    margins.gravity = if (align == "left" || align == "start") Gravity.START else if (align == "right" || align == "end") Gravity.END else Gravity.CENTER_HORIZONTAL
+                    margins.width = WRAP_CONTENT
+                    column.addView(button, margins)
+                }
+            }
+        }
+    }
+
+    private fun openBlock(block: JSONObject, alwaysClose: Boolean) {
+        val action = block.optJSONObject("action")
+        val type = action?.optString("type").orEmpty()
+        val value = action?.optString("value").orEmpty()
+        val link = value.startsWith("http://") || value.startsWith("https://") || (type == "deeplink" && value.contains("://"))
+        applyClicks(block.optJSONArray("clicks"))
+        if (link) openDynamic(value)
+        else if (alwaysClose || type == "dismiss" || block.optBoolean("dismissOnClick")) finish(dismissed = true)
+    }
+
+    private fun applyClicks(raw: JSONArray?) {
+        if (raw == null) return
+        for (index in 0 until raw.length()) {
+            val item = raw.optJSONObject(index) ?: continue
+            when (item.optString("kind")) {
+                "tag" -> {
+                    val key = item.optString("key").trim()
+                    if (key.isNotEmpty()) PushFyre.sendTag(activity, key, item.optString("value"))
+                }
+                "outcome" -> sendOutcome(item.optString("name"))
+                "action" -> {
+                    val name = item.optString("name").trim()
+                    if (name.isNotEmpty()) listener.onNamedClick(name)
+                }
+            }
+        }
+    }
+
+    private fun sendOutcome(name: String) {
+        val cleaned = name.trim()
+        if (!cleaned.matches(Regex("^[A-Za-z0-9_.: -]{1,80}$"))) return
+        val config = PushFyre.config ?: return
+        val deviceId = PushFyreApi.deviceId(activity) ?: return
+        thread(name = "pushfyre-outcome", isDaemon = true) {
+            runCatching {
+                PushFyreApi.authorizedRequest(
+                    activity,
+                    config,
+                    "POST",
+                    "/devices/$deviceId/session",
+                    JSONObject()
+                        .put("phase", "outcome")
+                        .put("outcomeName", cleaned)
+                        .put("outcomeWeight", 1)
+                        .put("attribution", "unattributed")
+                        .toString()
+                )
+            }
+        }
+    }
+
+    private fun styledType(style: JSONObject): Typeface {
+        val flags = (if (style.optBoolean("bold")) Typeface.BOLD else 0) or (if (style.optBoolean("italic")) Typeface.ITALIC else 0)
+        val family = when (style.optString("fontFamily")) {
+            "lora", "georgia" -> Typeface.SERIF
+            "courier" -> Typeface.MONOSPACE
+            else -> Typeface.SANS_SERIF
+        }
+        return Typeface.create(family, flags)
+    }
+
+    private fun blockGravity(align: String) = when (align) {
+        "center" -> Gravity.CENTER_HORIZONTAL
+        "right" -> Gravity.END
+        else -> Gravity.START
+    }
+
+    private fun closeButton(): View {
+        val icon = content.optString("closeIconUrl")
+        if (isHttp(icon)) {
+            return ImageView(activity).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = "Close"
+                setOnClickListener {
+                    applyClicks(content.optJSONArray("closeClicks"))
+                    finish(dismissed = true)
+                }
+                loadInto(this, icon)
+            }
+        }
+        return TextView(activity).apply {
+            text = "×"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            gravity = Gravity.CENTER
+            this.background = rounded(Color.parseColor("#59000000"), radius = 15f)
+            contentDescription = "Close"
+            setOnClickListener {
+                applyClicks(content.optJSONArray("closeClicks"))
+                finish(dismissed = true)
+            }
+        }
     }
 
     // MARK: - Actions

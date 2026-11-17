@@ -41,6 +41,19 @@ enum PushFyreDynamic {
             }
             next["dynamic"] = dynamic
         }
+        if let blocks = content["blocks"] as? [[String: Any]] {
+            next["blocks"] = blocks.map { block -> [String: Any] in
+                var copy = block
+                for key in ["text", "src", "label"] {
+                    if let text = copy[key] as? String { copy[key] = fill(text, tags: tags) }
+                }
+                if var action = copy["action"] as? [String: Any], let value = action["value"] as? String {
+                    action["value"] = fill(value, tags: tags)
+                    copy["action"] = action
+                }
+                return copy
+            }
+        }
         return next
     }
 

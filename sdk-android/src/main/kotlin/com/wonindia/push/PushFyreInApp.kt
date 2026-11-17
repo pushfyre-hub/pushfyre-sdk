@@ -159,6 +159,10 @@ internal object PushFyreInApp {
                         openAction(activity, message, url)
                     }
 
+                    override fun onNamedClick(actionId: String) {
+                        PushFyre.tapHandler?.onNotificationTapped(activity, null, actionId)
+                    }
+
                     override fun onRespond(answer: JSONObject) {
                         showing = false
                         report(app, cfg, message, "respond", answer)

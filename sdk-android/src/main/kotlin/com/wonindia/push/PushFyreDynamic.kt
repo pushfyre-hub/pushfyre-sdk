@@ -38,6 +38,11 @@ internal object PushFyreDynamic {
                 blocks.optJSONObject(index)?.let { fillBlock(it, tags) }
             }
         }
+        content.optJSONArray("blocks")?.let { blocks ->
+            for (index in 0 until blocks.length()) {
+                blocks.optJSONObject(index)?.let { fillBlock(it, tags) }
+            }
+        }
     }
 
     private fun fillBlock(block: JSONObject, tags: Map<String, String>) {
