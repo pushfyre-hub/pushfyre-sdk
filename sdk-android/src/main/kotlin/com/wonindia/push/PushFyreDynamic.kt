@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -34,13 +35,21 @@ internal object PushFyreDynamic {
         }
         content.optJSONObject("dynamic")?.optJSONArray("blocks")?.let { blocks ->
             for (index in 0 until blocks.length()) {
-                val block = blocks.optJSONObject(index) ?: continue
-                listOf("text", "src", "label").forEach { key ->
-                    if (block.has(key)) block.put(key, fill(block.optString(key), tags))
-                }
-                block.optJSONObject("action")?.let { action ->
-                    action.put("value", fill(action.optString("value"), tags))
-                }
+                blocks.optJSONObject(index)?.let { fillBlock(it, tags) }
+            }
+        }
+    }
+
+    private fun fillBlock(block: JSONObject, tags: Map<String, String>) {
+        listOf("text", "src", "label").forEach { key ->
+            if (block.has(key)) block.put(key, fill(block.optString(key), tags))
+        }
+        block.optJSONObject("action")?.let { action ->
+            action.put("value", fill(action.optString("value"), tags))
+        }
+        block.optJSONArray("children")?.let { children ->
+            for (index in 0 until children.length()) {
+                children.optJSONObject(index)?.let { fillBlock(it, tags) }
             }
         }
     }
@@ -79,13 +88,36 @@ internal object PushFyreDynamic {
     ): View? {
         val context = parent.context
         return when (block.optString("type")) {
+            "row", "column" -> {
+                val children = block.optJSONArray("children") ?: return null
+                LinearLayout(context).apply {
+                    orientation = if (block.optString("type") == "row") LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+                    gravity = gravity(block.optString("align"))
+                    paint(block.optString("background"))?.let { setBackgroundColor(it) }
+                    val pad = if (block.optString("background").isBlank()) 0 else dp(parent, 6)
+                    setPadding(pad, pad, pad, pad)
+                    for (index in 0 until children.length()) {
+                        val child = children.optJSONObject(index) ?: continue
+                        viewFor(this, child, textColor, buttonColor, onOpen, onImage)?.let { view ->
+                            val params = LinearLayout.LayoutParams(
+                                if (orientation == LinearLayout.HORIZONTAL) 0 else MATCH_PARENT,
+                                WRAP_CONTENT,
+                                if (orientation == LinearLayout.HORIZONTAL) 1f else 0f
+                            )
+                            addView(view, params)
+                        }
+                    }
+                }.takeIf { it.childCount > 0 }
+            }
             "text" -> {
                 val value = block.optString("text")
                 if (value.isBlank()) null
                 else TextView(context).apply {
                     text = value
-                    setTextColor(textColor)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    setTextColor(paint(block.optString("color")) ?: textColor)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize(block.optString("size")))
+                    gravity = gravity(block.optString("align"))
+                    paint(block.optString("background"))?.let { setBackgroundColor(it) }
                     setPadding(0, dp(parent, 4), 0, 0)
                 }
             }
@@ -108,13 +140,14 @@ internal object PushFyreDynamic {
                 if (label.isBlank()) null
                 else TextView(context).apply {
                     text = label
-                    setTextColor(Color.WHITE)
+                    setTextColor(paint(block.optString("color")) ?: Color.WHITE)
                     setTypeface(typeface, Typeface.BOLD)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize(block.optString("size")))
+                    gravity = gravity(block.optString("align"))
                     setPadding(dp(parent, 16), dp(parent, 10), dp(parent, 16), dp(parent, 10))
                     background = android.graphics.drawable.GradientDrawable().apply {
                         cornerRadius = dp(parent, 10).toFloat()
-                        setColor(buttonColor)
+                        setColor(paint(block.optString("background")) ?: buttonColor)
                     }
                     setOnClickListener {
                         val action = block.optJSONObject("action")
@@ -131,13 +164,14 @@ internal object PushFyreDynamic {
 
     fun lines(blocks: JSONArray?): String {
         if (blocks == null) return ""
-        return (0 until blocks.length()).mapNotNull { index ->
-            val block = blocks.optJSONObject(index) ?: return@mapNotNull null
+        return (0 until blocks.length()).flatMap { index ->
+            val block = blocks.optJSONObject(index) ?: return@flatMap emptyList()
             when (block.optString("type")) {
-                "text" -> block.optString("text").takeIf { it.isNotBlank() }
-                "image" -> "Image".takeIf { block.optString("src").startsWith("https://") }
-                "button" -> block.optString("label").takeIf { it.isNotBlank() }
-                else -> null
+                "row", "column" -> lines(block.optJSONArray("children")).split("\n").filter { it.isNotBlank() }
+                "text" -> listOfNotNull(block.optString("text").takeIf { it.isNotBlank() })
+                "image" -> listOfNotNull("Image".takeIf { block.optString("src").startsWith("https://") })
+                "button" -> listOfNotNull(block.optString("label").takeIf { it.isNotBlank() })
+                else -> emptyList()
             }
         }.joinToString("\n")
     }
@@ -146,6 +180,27 @@ internal object PushFyreDynamic {
         if (url.isBlank()) return
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(intent) }
+    }
+
+    private fun paint(value: String): Int? {
+        if (!Regex("#[0-9a-fA-F]{6}").matches(value)) return null
+        return runCatching { Color.parseColor(value) }.getOrNull()
+    }
+
+    private fun gravity(align: String): Int {
+        return when (align) {
+            "center" -> Gravity.CENTER_HORIZONTAL
+            "right" -> Gravity.END
+            else -> Gravity.START
+        }
+    }
+
+    private fun textSize(size: String): Float {
+        return when (size) {
+            "lg" -> 18f
+            "sm" -> 12f
+            else -> 14f
+        }
     }
 
     private fun dp(parent: LinearLayout, value: Int): Int {

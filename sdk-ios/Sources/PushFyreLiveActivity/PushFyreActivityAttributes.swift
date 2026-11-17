@@ -36,6 +36,37 @@ public struct PushFyreActivityAttributes: ActivityAttributes {
             public var src: String?
             public var label: String?
             public var action: Action?
+            public var align: String?
+            public var size: String?
+            public var color: String?
+            public var background: String?
+            public var children: [Item]?
+        }
+
+        /// A piece inside a row or column. A nested row or column holds leaves only.
+        public struct Item: Codable, Hashable {
+            public var type: String
+            public var text: String?
+            public var src: String?
+            public var label: String?
+            public var action: Action?
+            public var align: String?
+            public var size: String?
+            public var color: String?
+            public var background: String?
+            public var children: [Leaf]?
+        }
+
+        public struct Leaf: Codable, Hashable {
+            public var type: String
+            public var text: String?
+            public var src: String?
+            public var label: String?
+            public var action: Action?
+            public var align: String?
+            public var size: String?
+            public var color: String?
+            public var background: String?
         }
 
         public struct Action: Codable, Hashable {
