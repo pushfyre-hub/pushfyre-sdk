@@ -52,7 +52,8 @@ class PushFyreMessagingService : FirebaseMessagingService() {
             imageUrl,
             message.data["largeIcon"],
             message.data["actionButtons"],
-            notificationId
+            notificationId,
+            DisplayOptions.from(message.data)
         )
         if (shown && notificationId.isNotBlank()) {
             PushFyre.reportDeliveryEvent(this, notificationId, "delivered")
@@ -66,7 +67,8 @@ class PushFyreMessagingService : FirebaseMessagingService() {
         imageUrl: String?,
         largeIconUrl: String?,
         actionButtonsJson: String?,
-        notificationId: String
+        notificationId: String,
+        options: DisplayOptions
     ): Boolean {
         val config = PushFyre.config ?: run {
             Log.w(PushFyre.TAG, "message received before initialize - not displaying")
@@ -79,31 +81,55 @@ class PushFyreMessagingService : FirebaseMessagingService() {
         }
 
         val manager = getSystemService(NotificationManager::class.java)
+        val sound = options.sound?.let(::rawSound)
+        val ledColor = options.ledColor?.let(::parseColor)
+        // Android 8+ fixes sound and LED on the channel, so a campaign that picks either
+        // posts to its own channel. Without them it keeps the default channel.
+        val channelId = if (sound == null && ledColor == null) config.channelId
+        else listOfNotNull(config.channelId, sound?.let { options.sound?.let(::resourceName) }, ledColor?.let { "led%08x".format(it) })
+            .joinToString("_")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Android 8+ silently drops notifications posted to an unknown channel.
             manager.createNotificationChannel(
-                NotificationChannel(
-                    config.channelId, config.channelName, NotificationManager.IMPORTANCE_HIGH
-                )
+                NotificationChannel(channelId, config.channelName, NotificationManager.IMPORTANCE_HIGH).apply {
+                    sound?.let {
+                        setSound(it, android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                            .build())
+                    }
+                    ledColor?.let {
+                        enableLights(true)
+                        lightColor = it
+                    }
+                }
             )
         }
 
-        // Same convention OneSignal uses: a drawable named ic_stat_pushfyre_default
-        // wins, then an explicitly configured res id, then the launcher icon. The launcher
-        // icon is the last resort because Android silhouettes the small icon, which turns
-        // most full-colour app icons into a white square.
-        val icon = resources.getIdentifier("ic_stat_pushfyre_default", "drawable", packageName)
-            .takeIf { it != 0 }
+        // A drawable named in the campaign wins. Then the same convention OneSignal uses:
+        // ic_stat_pushfyre_default, then an explicitly configured res id, then the launcher
+        // icon. The launcher icon is the last resort because Android silhouettes the small
+        // icon, which turns most full-colour app icons into a white square.
+        val icon = options.smallIcon?.let(::drawableId)
+            ?: resources.getIdentifier("ic_stat_pushfyre_default", "drawable", packageName)
+                .takeIf { it != 0 }
             ?: config.smallIconRes.takeIf { it != 0 }
             ?: applicationInfo.icon
 
-        val builder = NotificationCompat.Builder(this, config.channelId)
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(icon)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(tapIntent(target, notificationId = notificationId))
+
+        options.subtitle?.let(builder::setSubText)
+        options.category?.let(builder::setCategory)
+        builder.setVisibility(options.visibility)
+        options.accentColor?.let(::parseColor)?.let(builder::setColor)
+        options.groupKey?.let(builder::setGroup)
+        sound?.let(builder::setSound)
+        ledColor?.let { builder.setLights(it, 1000, 1000) }
 
         // A campaign image becomes the expanded big picture; without one, long text
         // expands instead so the body is never truncated.
@@ -132,8 +158,81 @@ class PushFyreMessagingService : FirebaseMessagingService() {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
         }
 
-        manager.notify(Random.nextInt(), builder.build())
+        // A Collapse ID replaces the notification already showing under that id.
+        val collapseId = options.collapseId
+        if (collapseId != null) manager.notify(collapseId, 0, builder.build())
+        else manager.notify(Random.nextInt(), builder.build())
         return true
+    }
+
+    private fun resourceName(value: String) =
+        value.substringAfterLast('/').substringBeforeLast('.').lowercase().replace(Regex("[^a-z0-9_]"), "_")
+
+    private fun drawableId(name: String): Int? {
+        val resource = resourceName(name)
+        return resources.getIdentifier(resource, "drawable", packageName).takeIf { it != 0 }
+            ?: resources.getIdentifier(resource, "mipmap", packageName).takeIf { it != 0 }
+    }
+
+    /** Campaign sounds are files in the app's res/raw, named without the extension. */
+    private fun rawSound(name: String): Uri? {
+        val resource = resourceName(name)
+        if (resource.isBlank() || resource == "default") return null
+        val id = resources.getIdentifier(resource, "raw", packageName)
+        if (id == 0) {
+            Log.w(PushFyre.TAG, "sound $name is not in res/raw - using the default sound")
+            return null
+        }
+        return Uri.parse("android.resource://$packageName/$id")
+    }
+
+    /** Portal colours are RRGGBB or AARRGGBB, with or without a leading #. */
+    private fun parseColor(value: String): Int? = runCatching {
+        android.graphics.Color.parseColor("#" + value.trim().removePrefix("#"))
+    }.getOrNull()
+
+    /** The composer's Android settings, as the worker puts them in the data map. */
+    internal data class DisplayOptions(
+        val subtitle: String?,
+        val smallIcon: String?,
+        val sound: String?,
+        val category: String?,
+        val visibility: Int,
+        val ledColor: String?,
+        val accentColor: String?,
+        val groupKey: String?,
+        val collapseId: String?
+    ) {
+        companion object {
+            private val CATEGORIES = mapOf(
+                "alarm" to NotificationCompat.CATEGORY_ALARM,
+                "call" to NotificationCompat.CATEGORY_CALL,
+                "event" to NotificationCompat.CATEGORY_EVENT,
+                "message" to NotificationCompat.CATEGORY_MESSAGE,
+                "promo" to NotificationCompat.CATEGORY_PROMO,
+                "reminder" to NotificationCompat.CATEGORY_REMINDER,
+                "social" to NotificationCompat.CATEGORY_SOCIAL
+            )
+
+            fun from(data: Map<String, String>): DisplayOptions {
+                fun value(key: String) = data[key]?.trim()?.takeIf { it.isNotEmpty() }
+                return DisplayOptions(
+                    subtitle = value("subtitle"),
+                    smallIcon = value("smallIcon"),
+                    sound = value("sound"),
+                    category = value("category")?.let { CATEGORIES[it.lowercase()] },
+                    visibility = when (value("visibility")?.lowercase()) {
+                        "private" -> NotificationCompat.VISIBILITY_PRIVATE
+                        "secret" -> NotificationCompat.VISIBILITY_SECRET
+                        else -> NotificationCompat.VISIBILITY_PUBLIC
+                    },
+                    ledColor = value("ledColor"),
+                    accentColor = value("accentColor"),
+                    groupKey = value("groupKey"),
+                    collapseId = value("collapseId")
+                )
+            }
+        }
     }
 
     /**

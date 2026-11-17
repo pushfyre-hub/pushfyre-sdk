@@ -92,7 +92,16 @@ open class PushFyreNotificationService: UNNotificationServiceExtension {
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        // Keep the app's own categories: a campaign's iOS Category field names one of them.
+        let center = UNUserNotificationCenter.current()
+        let registered = DispatchSemaphore(value: 0)
+        center.getNotificationCategories { existing in
+            var merged = existing.filter { $0.identifier != Self.dynamicCategory }
+            merged.insert(category)
+            center.setNotificationCategories(merged)
+            registered.signal()
+        }
+        _ = registered.wait(timeout: .now() + 1)
         content.categoryIdentifier = Self.dynamicCategory
     }
 
