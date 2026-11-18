@@ -18,7 +18,7 @@ The SDK is on Maven Central, so there is no repository or token to set up. Add o
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("io.github.pushfyre-hub:sdk-android:1.0.3")
+    implementation("io.github.pushfyre-hub:sdk-android:1.0.4")
 }
 ```
 
@@ -118,8 +118,8 @@ A button that opens a link goes to `PushFyre.setTapHandler` first (with `actionI
 ## Releasing a new version
 
 ```bash
-git tag 1.0.4
-git push origin 1.0.4
+git tag 1.0.5
+git push origin 1.0.5
 ```
 
 CI publishes that tag to Maven Central. The one-time account, namespace and signing setup is in [RELEASING.md](RELEASING.md). Locally, `./gradlew :sdk-android:publishToMavenLocal` publishes `1.0.0-SNAPSHOT` for same-machine testing.

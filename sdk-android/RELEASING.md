@@ -3,7 +3,7 @@
 Apps add the SDK with one line and nothing else, because Maven Central is already a default repository in every Android project:
 
 ```kotlin
-implementation("io.github.pushfyre-hub:sdk-android:1.0.3")
+implementation("io.github.pushfyre-hub:sdk-android:1.0.4")
 ```
 
 That only works once a version is published to **Maven Central**. This is the one-time setup, then the routine release.
@@ -34,8 +34,8 @@ That only works once a version is published to **Maven Central**. This is the on
 ## Each release
 
 ```bash
-git tag 1.0.4
-git push origin 1.0.4
+git tag 1.0.5
+git push origin 1.0.5
 ```
 
 The workflow builds, signs and publishes that version. It appears on Maven Central within a few minutes to an hour, and cannot be changed or removed afterwards, so test first with a snapshot:

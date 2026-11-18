@@ -16,7 +16,7 @@ Push notifications, in-app messages and user tagging for mobile apps, backed by 
    ```kotlin
    // app/build.gradle.kts
    dependencies {
-       implementation("io.github.pushfyre-hub:sdk-android:1.0.3")
+       implementation("io.github.pushfyre-hub:sdk-android:1.0.4")
    }
    ```
 
@@ -50,7 +50,7 @@ Requirements: `minSdk 24`, the Google Services plugin and `google-services.json`
 
    ```swift
    dependencies: [
-       .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.3")
+       .package(url: "https://github.com/pushfyre-hub/pushfyre-sdk.git", from: "1.0.4")
    ],
    targets: [
        .target(name: "YourApp", dependencies: ["PushFyre"])
@@ -86,7 +86,7 @@ Details and code: [`sdk-android/README.md`](sdk-android/README.md) and [`sdk-ios
 
 ## Releasing
 
-Maintainers: one tag releases both SDKs. Pushing a version tag such as `1.0.4` publishes the Android SDK to Maven Central, and the same tag is what Swift Package Manager installs for iOS. See [`sdk-android/RELEASING.md`](sdk-android/RELEASING.md).
+Maintainers: one tag releases both SDKs. Pushing a version tag such as `1.0.5` publishes the Android SDK to Maven Central, and the same tag is what Swift Package Manager installs for iOS. See [`sdk-android/RELEASING.md`](sdk-android/RELEASING.md).
 
 ## License
 
