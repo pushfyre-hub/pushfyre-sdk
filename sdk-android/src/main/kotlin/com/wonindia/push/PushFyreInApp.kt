@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.net.URLEncoder
@@ -25,7 +26,11 @@ internal class InAppMessage(
     val content: JSONObject,
     val frequencyType: String,
     val frequencyDays: Int,
-    val maxImpressions: Int
+    val maxImpressions: Int,
+    val groups: JSONArray = JSONArray(),
+    val dismissAfter: Int = 0,
+    val frequencyTimes: Int = 0,
+    val frequencyGapMs: Long = 0L
 )
 
 /**
@@ -45,6 +50,10 @@ internal object PushFyreInApp {
 
     /** Ids already shown since the process started, for the "once per session" rule. */
     private val shownThisSession = mutableSetOf<String>()
+    private val sessionMessages = mutableListOf<InAppMessage>()
+    private val triggerValues = mutableMapOf<String, String>()
+    private val sessionStarted = System.currentTimeMillis()
+    private var sessionLoaded = false
 
     @Volatile private var showing = false
     @Volatile private var tracker: ActivityTracker? = null
@@ -99,10 +108,23 @@ internal object PushFyreInApp {
         val cfg = PushFyre.config ?: run { Log.w(PushFyre.TAG, "in-app trigger before initialize - ignored"); return }
         if (!enabled) return
         val app = context.applicationContext
+        if (!eventName.isNullOrBlank()) {
+            synchronized(triggerValues) { triggerValues[eventName] = "true" }
+            considerSession(app, cfg)
+        }
+        if (trigger == "app_open") ensureSession(app, cfg)
         scope.launch {
             runCatching { fetchAndShow(app, cfg, trigger, eventName) }
                 .onFailure { Log.w(PushFyre.TAG, "in-app messaging failed: ${it.message}") }
         }
+    }
+
+    fun addTrigger(context: Context, key: String, value: String) {
+        val name = key.trim()
+        if (name.isEmpty() || !enabled) return
+        val cfg = PushFyre.config ?: return
+        synchronized(triggerValues) { triggerValues[name] = value }
+        considerSession(context.applicationContext, cfg)
     }
 
     private fun fetchAndShow(app: Context, cfg: PushFyreConfig, trigger: String, eventName: String?) {
@@ -128,7 +150,11 @@ internal object PushFyreInApp {
                 content = json.optJSONObject("content") ?: JSONObject(),
                 frequencyType = frequency?.optString("type").orEmpty().ifBlank { "every_session" },
                 frequencyDays = frequency?.optInt("days", 1) ?: 1,
-                maxImpressions = if (json.isNull("maxImpressions")) 0 else json.optInt("maxImpressions", 0)
+                maxImpressions = if (json.isNull("maxImpressions")) 0 else json.optInt("maxImpressions", 0),
+                groups = json.optJSONArray("groups") ?: JSONArray(),
+                dismissAfter = if (json.isNull("dismissAfter")) 0 else json.optInt("dismissAfter", 0),
+                frequencyTimes = frequency?.optInt("times", 0) ?: 0,
+                frequencyGapMs = gapMillis(frequency)
             )
             if (message.id.isBlank() || !known(message.format) || !allowed(app, message)) continue
             present(app, cfg, message)
@@ -203,8 +229,128 @@ internal object PushFyreInApp {
             "every_n_days" -> lastAt == 0L ||
                 System.currentTimeMillis() - lastAt >= message.frequencyDays.coerceAtLeast(1) * 86_400_000L
             "every_session" -> synchronized(shownThisSession) { message.id !in shownThisSession }
+            "multiple" -> count < message.frequencyTimes.coerceAtLeast(1) &&
+                (lastAt == 0L || System.currentTimeMillis() - lastAt >= message.frequencyGapMs.coerceAtLeast(1L))
             else -> true
         }
+    }
+
+    private fun gapMillis(frequency: JSONObject?): Long {
+        if (frequency == null) return 86_400_000L
+        val gap = frequency.optInt("gap", frequency.optInt("days", 1)).coerceAtLeast(1)
+        return when (frequency.optString("gapUnit")) {
+            "minutes" -> gap * 60_000L
+            "hours" -> gap * 3_600_000L
+            "weeks" -> gap * 7L * 86_400_000L
+            else -> gap * 86_400_000L
+        }
+    }
+
+    private fun ensureSession(app: Context, cfg: PushFyreConfig) {
+        if (sessionLoaded) return
+        sessionLoaded = true
+        scope.launch {
+            runCatching {
+                val loaded = fetch(app, cfg, "session", null)
+                synchronized(sessionMessages) {
+                    sessionMessages.clear()
+                    sessionMessages.addAll(loaded)
+                }
+                main.post(sessionTick)
+            }.onFailure { Log.w(PushFyre.TAG, "in-app session triggers failed: ${it.message}") }
+        }
+    }
+
+    private val sessionTick = object : Runnable {
+        override fun run() {
+            val cfg = PushFyre.config
+            val app = tracker?.current?.get()?.applicationContext
+            if (cfg != null && app != null) considerSession(app, cfg)
+            main.postDelayed(this, 1000L)
+        }
+    }
+
+    private fun considerSession(app: Context, cfg: PushFyreConfig) {
+        if (showing) return
+        val messages = synchronized(sessionMessages) { sessionMessages.toList() }
+        val message = messages.firstOrNull { groupsMatch(it) && allowed(app, it) } ?: return
+        present(app, cfg, message)
+    }
+
+    private fun groupsMatch(message: InAppMessage): Boolean {
+        val groups = message.groups
+        if (groups.length() == 0) return false
+        for (index in 0 until groups.length()) {
+            val group = groups.optJSONArray(index) ?: continue
+            if (group.length() == 0) continue
+            if ((0 until group.length()).all { ruleMatches(group.optJSONObject(it)) }) return true
+        }
+        return false
+    }
+
+    private fun ruleMatches(rule: JSONObject?): Boolean {
+        if (rule == null) return false
+        return when (rule.optString("kind")) {
+            "trigger" -> {
+                val key = rule.optString("key").trim()
+                if (key.isEmpty()) return false
+                val actual = synchronized(triggerValues) { triggerValues[key] }.orEmpty()
+                if (rule.optString("operator") == "is_not") actual != rule.optString("value") else actual == rule.optString("value")
+            }
+            "session_duration", "since_last" -> {
+                val seconds = rule.optInt("seconds", 0)
+                if (seconds < 1) return false
+                val elapsed = if (rule.optString("kind") == "since_last") {
+                    val last = prefsLast()
+                    if (last == 0L) 1_000_000_000.0 else (System.currentTimeMillis() - last) / 1000.0
+                } else {
+                    (System.currentTimeMillis() - sessionStarted) / 1000.0
+                }
+                if (rule.optString("operator") == "less") elapsed < seconds else elapsed > seconds
+            }
+            else -> false
+        }
+    }
+
+    private fun prefsLast(): Long {
+        val app = tracker?.current?.get()?.applicationContext ?: return 0L
+        return prefs(app).getLong("pushfyre.inapp.last", 0L)
+    }
+
+    private fun fetch(app: Context, cfg: PushFyreConfig, trigger: String, eventName: String?): List<InAppMessage> {
+        val query = buildString {
+            append("/in-app/sdk/messages?appId=").append(enc(cfg.appId))
+            append("&platform=android&trigger=").append(enc(trigger))
+            append("&widgets=1")
+            if (!eventName.isNullOrBlank()) append("&eventName=").append(enc(eventName))
+            PushFyreApi.deviceId(app)?.let { append("&deviceId=").append(enc(it)) }
+        }
+        val (code, body) = PushFyreApi.authorizedRequest(app, cfg, "GET", query)
+        if (code !in 200..299) return emptyList()
+        val array = JSONObject(body).optJSONArray("messages") ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                val json = array.optJSONObject(index) ?: continue
+                add(parseMessage(json))
+            }
+        }
+    }
+
+    private fun parseMessage(json: JSONObject): InAppMessage {
+        val frequency = json.optJSONObject("frequency")
+        return InAppMessage(
+            id = json.optString("id"),
+            name = json.optString("name"),
+            format = json.optString("format"),
+            content = json.optJSONObject("content") ?: JSONObject(),
+            frequencyType = frequency?.optString("type").orEmpty().ifBlank { "every_session" },
+            frequencyDays = frequency?.optInt("days", 1) ?: 1,
+            maxImpressions = if (json.isNull("maxImpressions")) 0 else json.optInt("maxImpressions", 0),
+            groups = json.optJSONArray("groups") ?: JSONArray(),
+            dismissAfter = if (json.isNull("dismissAfter")) 0 else json.optInt("dismissAfter", 0),
+            frequencyTimes = frequency?.optInt("times", 0) ?: 0,
+            frequencyGapMs = gapMillis(frequency)
+        )
     }
 
     private fun recordShown(context: Context, message: InAppMessage) {
@@ -212,6 +358,7 @@ internal object PushFyreInApp {
         prefs.edit()
             .putInt("${message.id}.count", prefs.getInt("${message.id}.count", 0) + 1)
             .putLong("${message.id}.last", System.currentTimeMillis())
+            .putLong("pushfyre.inapp.last", System.currentTimeMillis())
             .apply()
         synchronized(shownThisSession) { shownThisSession.add(message.id) }
     }

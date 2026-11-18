@@ -113,6 +113,12 @@ object PushFyre {
         PushFyreInApp.trigger(app, "event", name)
     }
 
+    /** Sets a value the in-app session triggers can match, for example `addTrigger(context, "plan", "pro")`. */
+    @JvmStatic
+    fun addTrigger(context: Context, key: String, value: String) {
+        PushFyreInApp.addTrigger(context, key, value)
+    }
+
     private fun recordEvent(app: Context, name: String, properties: Map<String, Any?>?) {
         val cfg = config ?: return
         scope.launch {

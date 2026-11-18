@@ -80,6 +80,11 @@ internal class PushFyreInAppRenderer(
         else if (message.format == "banner") showBanner()
         else showDialog()
         listener.onShown()
+        if (message.dismissAfter > 0) {
+            activity.window.decorView.postDelayed({
+                if (!finished) finish(dismissed = true)
+            }, message.dismissAfter * 1000L)
+        }
     }
 
     // MARK: - Containers
@@ -131,7 +136,10 @@ internal class PushFyreInAppRenderer(
             elevation = dp(8).toFloat()
         }
         fillDesigned(bar)
-        bar.setOnClickListener { applyClicks(content.optJSONArray("backgroundClicks")) }
+        bar.setOnClickListener {
+            applyClicks(content.optJSONArray("backgroundClicks"))
+            if (content.optBoolean("backgroundDismissOnClick")) finish(dismissed = true)
+        }
         val holder = FrameLayout(activity)
         paintBackground(holder)
         holder.addView(bar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -175,7 +183,10 @@ internal class PushFyreInAppRenderer(
         val card = buildCard(format)
         val frame = FrameLayout(activity)
         frame.setOnClickListener { finish(dismissed = true) }
-        card.setOnClickListener { applyClicks(content.optJSONArray("backgroundClicks")) }
+        card.setOnClickListener {
+            applyClicks(content.optJSONArray("backgroundClicks"))
+            if (content.optBoolean("backgroundDismissOnClick")) finish(dismissed = true)
+        }
 
         val width = (activity.resources.displayMetrics.widthPixels - dp(40)).coerceAtMost(dp(if (format == "image") 460 else 420))
         val slot = if (format == "dynamic") dynamicPlace() else format

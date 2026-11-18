@@ -10,6 +10,10 @@ struct InAppMessage {
     let frequencyType: String
     let frequencyDays: Int
     let maxImpressions: Int
+    let groups: [[ [String: Any] ]]
+    let dismissAfter: Int
+    let frequencyTimes: Int
+    let frequencyGap: TimeInterval
 }
 
 /// In-app messaging: fetches the messages that apply to this install, shows at most one at a
@@ -26,13 +30,30 @@ enum PushFyreInApp {
     private static var shownThisSession = Set<String>()
     private static var showing = false
     private static var activeRenderer: PushFyreInAppRenderer?
+    private static var sessionMessages: [InAppMessage] = []
+    private static var triggerValues: [String: String] = [:]
+    private static let sessionStarted = Date()
+    private static var sessionLoaded = false
+    private static var sessionTimer: Timer?
 
     static var enabled = true
 
     // MARK: - Triggers
 
+    static func addTrigger(key: String, value: String) {
+        let name = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard enabled, !name.isEmpty, let config = PushFyre.config else { return }
+        stateQueue.sync { triggerValues[name] = value }
+        considerSession(config)
+    }
+
     static func trigger(trigger: String, eventName: String?) {
         guard enabled, let config = PushFyre.config else { return }
+        if let eventName = eventName, !eventName.isEmpty {
+            stateQueue.sync { triggerValues[eventName] = "true" }
+            considerSession(config)
+        }
+        if trigger == "app_open" { ensureSession(config) }
 
         var path = "/in-app/sdk/messages?appId=\(escape(config.appId))&platform=ios&trigger=\(escape(trigger))&widgets=1"
         if let eventName = eventName, !eventName.isEmpty { path += "&eventName=\(escape(eventName))" }
@@ -53,7 +74,11 @@ enum PushFyreInApp {
                     content: item["content"] as? [String: Any] ?? [:],
                     frequencyType: (frequency?["type"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "every_session",
                     frequencyDays: frequency?["days"] as? Int ?? 1,
-                    maxImpressions: item["maxImpressions"] as? Int ?? 0
+                    maxImpressions: item["maxImpressions"] as? Int ?? 0,
+                    groups: parsedGroups(item["groups"]),
+                    dismissAfter: item["dismissAfter"] as? Int ?? 0,
+                    frequencyTimes: frequency?["times"] as? Int ?? 0,
+                    frequencyGap: gapSeconds(frequency)
                 )
                 if !message.id.isEmpty, known(message.format), allowed(message) {
                     DispatchQueue.main.async { present(message, config: config) }
@@ -143,15 +168,113 @@ enum PushFyreInApp {
             return Date().timeIntervalSince1970 - last >= Double(max(1, message.frequencyDays)) * 86_400
         case "every_session":
             return stateQueue.sync { !shownThisSession.contains(message.id) }
+        case "multiple":
+            if count >= max(1, message.frequencyTimes) { return false }
+            guard last > 0 else { return true }
+            return Date().timeIntervalSince1970 - last >= message.frequencyGap
         default:
             return true
         }
+    }
+
+    private static func gapSeconds(_ frequency: [String: Any]?) -> TimeInterval {
+        let gap = frequency?["gap"] as? Int ?? frequency?["days"] as? Int ?? 1
+        let amount = TimeInterval(max(1, gap))
+        switch frequency?["gapUnit"] as? String {
+        case "minutes": return amount * 60
+        case "hours": return amount * 3_600
+        case "weeks": return amount * 7 * 86_400
+        default: return amount * 86_400
+        }
+    }
+
+    private static func parsedGroups(_ raw: Any?) -> [[[String: Any]]] {
+        guard let groups = raw as? [Any] else { return [] }
+        return groups.compactMap { group in
+            (group as? [Any])?.compactMap { $0 as? [String: Any] }
+        }
+    }
+
+    private static func ensureSession(_ config: PushFyreConfig) {
+        let start = stateQueue.sync { () -> Bool in
+            if sessionLoaded { return false }
+            sessionLoaded = true
+            return true
+        }
+        guard start else { return }
+        var path = "/in-app/sdk/messages?appId=\(escape(config.appId))&platform=ios&trigger=session&widgets=1"
+        if let deviceId = PushFyreApi.deviceId { path += "&deviceId=\(escape(deviceId))" }
+        PushFyreApi.authorizedRequest(config, method: "GET", path: path) { status, data in
+            guard (200...299).contains(status),
+                  let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let items = json["messages"] as? [[String: Any]] else { return }
+            let loaded = items.map { parse($0) }.filter { !$0.id.isEmpty }
+            stateQueue.sync { sessionMessages = loaded }
+            DispatchQueue.main.async {
+                considerSession(config)
+                if sessionTimer == nil {
+                    sessionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in considerSession(config) }
+                }
+            }
+        }
+    }
+
+    private static func parse(_ item: [String: Any]) -> InAppMessage {
+        let frequency = item["frequency"] as? [String: Any]
+        return InAppMessage(
+            id: item["id"] as? String ?? "",
+            name: item["name"] as? String ?? "",
+            format: item["format"] as? String ?? "modal",
+            content: item["content"] as? [String: Any] ?? [:],
+            frequencyType: (frequency?["type"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "every_session",
+            frequencyDays: frequency?["days"] as? Int ?? 1,
+            maxImpressions: item["maxImpressions"] as? Int ?? 0,
+            groups: parsedGroups(item["groups"]),
+            dismissAfter: item["dismissAfter"] as? Int ?? 0,
+            frequencyTimes: frequency?["times"] as? Int ?? 0,
+            frequencyGap: gapSeconds(frequency)
+        )
+    }
+
+    private static func considerSession(_ config: PushFyreConfig) {
+        guard !showing else { return }
+        let messages = stateQueue.sync { sessionMessages }
+        guard let message = messages.first(where: { groupsMatch($0) && known($0.format) && allowed($0) }) else { return }
+        DispatchQueue.main.async { present(message, config: config) }
+    }
+
+    private static func groupsMatch(_ message: InAppMessage) -> Bool {
+        message.groups.contains { group in !group.isEmpty && group.allSatisfy(ruleMatches) }
+    }
+
+    private static func ruleMatches(_ rule: [String: Any]) -> Bool {
+        let kind = rule["kind"] as? String ?? ""
+        if kind == "trigger" {
+            let key = (rule["key"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { return false }
+            let actual = stateQueue.sync { triggerValues[key] ?? "" }
+            let expected = rule["value"] as? String ?? ""
+            return (rule["operator"] as? String) == "is_not" ? actual != expected : actual == expected
+        }
+        guard kind == "session_duration" || kind == "since_last" else { return false }
+        let seconds = TimeInterval(rule["seconds"] as? Int ?? 0)
+        guard seconds >= 1 else { return false }
+        let elapsed: TimeInterval
+        if kind == "since_last" {
+            let last = defaults.double(forKey: "pushfyre.inapp.last")
+            elapsed = last > 0 ? Date().timeIntervalSince1970 - last : 1_000_000_000
+        } else {
+            elapsed = Date().timeIntervalSince(sessionStarted)
+        }
+        return (rule["operator"] as? String) == "less" ? elapsed < seconds : elapsed > seconds
     }
 
     private static func recordShown(_ message: InAppMessage) {
         let key = "pushfyre.inapp.\(message.id)"
         defaults.set(defaults.integer(forKey: "\(key).count") + 1, forKey: "\(key).count")
         defaults.set(Date().timeIntervalSince1970, forKey: "\(key).last")
+        defaults.set(Date().timeIntervalSince1970, forKey: "pushfyre.inapp.last")
         stateQueue.sync { _ = shownThisSession.insert(message.id) }
     }
 

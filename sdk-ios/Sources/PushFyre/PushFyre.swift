@@ -82,6 +82,11 @@ public enum PushFyre {
         PushFyreInApp.trigger(trigger: "event", eventName: name)
     }
 
+    /// Sets a value the in-app session triggers can match, for example `PushFyre.addTrigger(key: "plan", value: "pro")`.
+    public static func addTrigger(key: String, value: String) {
+        PushFyreInApp.addTrigger(key: key, value: value)
+    }
+
     private static func recordEvent(_ name: String, properties: [String: Any]?) {
         guard let config = config, let deviceId = PushFyreApi.deviceId else { return }
         var body: [String: Any] = ["appId": config.appId, "deviceId": deviceId, "name": name]

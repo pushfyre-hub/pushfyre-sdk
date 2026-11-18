@@ -69,6 +69,11 @@ final class PushFyreInAppRenderer {
             showOverlay()
         }
         onShown?()
+        if message.dismissAfter > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(message.dismissAfter)) { [weak self] in
+                self?.dismiss()
+            }
+        }
     }
 
     private func dynamicPlace() -> String {
@@ -922,6 +927,7 @@ final class PushFyreInAppRenderer {
         if hit is UIControl { return }
         if (hit as? UIImageView)?.accessibilityIdentifier == "inapp-block" { return }
         applyClicks(content["backgroundClicks"])
+        if (content["backgroundDismissOnClick"] as? Bool) == true { dismiss() }
     }
 
     @objc private func closeTapped() {
@@ -935,6 +941,7 @@ final class PushFyreInAppRenderer {
             if hit is UIControl { return }
             if (hit as? UIImageView)?.accessibilityIdentifier == "inapp-block" { return }
             applyClicks(content["backgroundClicks"])
+            if (content["backgroundDismissOnClick"] as? Bool) == true { dismiss() }
             return
         }
         dismiss()

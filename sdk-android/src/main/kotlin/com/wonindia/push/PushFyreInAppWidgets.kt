@@ -158,6 +158,9 @@ internal object PushFyreInAppWidgets {
         dialog.setOnCancelListener { finish(null) }
         dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.show()
+        if (message.dismissAfter > 0) {
+            dialog.window?.decorView?.postDelayed({ finish(null) }, message.dismissAfter * 1000L)
+        }
         listener.onShown()
     }
 

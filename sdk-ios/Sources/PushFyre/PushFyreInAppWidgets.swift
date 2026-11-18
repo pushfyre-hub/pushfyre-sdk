@@ -145,6 +145,9 @@ enum PushFyreInAppWidgets {
         ])
         window.addSubview(dim)
         onShown()
+        if message.dismissAfter > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(message.dismissAfter)) { finish(nil) }
+        }
     }
 
     private static func addContent(_ content: [String: Any], to card: UIStackView, textColor: UIColor, buttonColor: UIColor) {
