@@ -17,7 +17,9 @@ import org.json.JSONObject
 
 /** Fills {{name}} from device tags and draws the extra blocks under or over a message. */
 internal object PushFyreDynamic {
-    private val placeholder = Regex("\\{\\{\\s*([A-Za-z0-9_.-]{1,64})\\s*}}")
+    // Both closing braces are escaped on purpose: the JVM accepts a bare "}}", but Android's regex engine
+    // (ICU) throws PatternSyntaxException, which broke every in-app message on Android.
+    private val placeholder = Regex("\\{\\{\\s*([A-Za-z0-9_.-]{1,64})\\s*\\}\\}")
 
     fun fill(value: String, tags: Map<String, String>): String {
         if (!value.contains("{{")) return value
