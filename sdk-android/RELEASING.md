@@ -3,7 +3,7 @@
 Apps add the SDK with one line and nothing else, because Maven Central is already a default repository in every Android project:
 
 ```kotlin
-implementation("io.github.pushfyre-hub:sdk-android:1.0.4")
+implementation("io.github.pushfyre-hub:sdk-android:1.0.5")
 ```
 
 That only works once a version is published to **Maven Central**. This is the one-time setup, then the routine release.

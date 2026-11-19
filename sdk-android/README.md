@@ -18,7 +18,7 @@ The SDK is on Maven Central, so there is no repository or token to set up. Add o
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("io.github.pushfyre-hub:sdk-android:1.0.4")
+    implementation("io.github.pushfyre-hub:sdk-android:1.0.5")
 }
 ```
 
